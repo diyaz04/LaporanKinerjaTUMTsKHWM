@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../../lib/supabase'
 import { Button } from '../../components/ui/button'
 import { Input } from '../../components/ui/input'
@@ -19,10 +19,23 @@ import {
   DialogTitle,
   DialogFooter,
 } from '../../components/ui/dialog'
+import { Upload, Download, FileSpreadsheet, CreditCard, CheckCircle2, XCircle, Loader2, Eye, EyeOff } from 'lucide-react'
 import type { Profile, TaskCategory } from '../../types/database'
+import { downloadExcelTemplate, parseExcelFile } from '../../lib/excelTemplate'
+import type { StaffImportRow } from '../../lib/excelTemplate'
+import { generateAccessCardPDF } from '../../lib/generateAccessCard'
 
 type StaffWithAssignments = Profile & {
   staff_assignments: { task_categories: TaskCategory | null }[]
+}
+
+type ImportResult = {
+  index: number
+  nama: string
+  email: string
+  success: boolean
+  error?: string
+  userId?: string
 }
 
 export default function StaffManager() {
@@ -30,19 +43,37 @@ export default function StaffManager() {
   const [categories, setCategories] = useState<TaskCategory[]>([])
   const [loading, setLoading] = useState(true)
 
-  // Dialog states
+  // ── Dialog: Add / Edit Staff ──
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [isEditMode, setIsEditMode] = useState(false)
   const [currentStaffId, setCurrentStaffId] = useState<string | null>(null)
-  
-  // Form states
   const [nama, setNama] = useState('')
   const [jabatan, setJabatan] = useState('')
-  const [email, setEmail] = useState('') // Only for create
-  const [password, setPassword] = useState('') // Only for create
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
   const [selectedCategories, setSelectedCategories] = useState<string[]>([])
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [errorMsg, setErrorMsg] = useState('')
+
+  // ── Dialog: Import Excel ──
+  const [isImportOpen, setIsImportOpen] = useState(false)
+  const [importRows, setImportRows] = useState<StaffImportRow[]>([])
+  const [importFileName, setImportFileName] = useState('')
+  const [importProgress, setImportProgress] = useState(0)
+  const [importTotal, setImportTotal] = useState(0)
+  const [importResults, setImportResults] = useState<ImportResult[]>([])
+  const [importPhase, setImportPhase] = useState<'upload' | 'preview' | 'processing' | 'done'>('upload')
+  const [importError, setImportError] = useState('')
+  // Simpan data import (nama + password) untuk export kartu langsung setelah import
+  const [postImportCards, setPostImportCards] = useState<{ nama: string; jabatan: string; email: string; password: string }[]>([])
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // ── Dialog: Kartu Akses Individual ──
+  const [isCardDialogOpen, setIsCardDialogOpen] = useState(false)
+  const [cardStaff, setCardStaff] = useState<StaffWithAssignments | null>(null)
+  const [cardPassword, setCardPassword] = useState('')
+  const [showCardPassword, setShowCardPassword] = useState(false)
+  const [isGeneratingCard, setIsGeneratingCard] = useState(false)
 
   useEffect(() => {
     fetchData()
@@ -50,45 +81,27 @@ export default function StaffManager() {
 
   const fetchData = async () => {
     setLoading(true)
-    
-    // Fetch categories
     const { data: catData } = await supabase
       .from('task_categories')
       .select('*')
       .order('nomor_urut')
-    
     if (catData) setCategories(catData)
 
-    // Fetch staff with assignments
     const { data: staffData } = await supabase
       .from('profiles')
-      .select(`
-        *,
-        staff_assignments(
-          task_categories(*)
-        )
-      `)
+      .select(`*, staff_assignments(task_categories(*))`)
       .eq('role', 'staff')
-
     if (staffData) setStaffList(staffData as StaffWithAssignments[])
-    
     setLoading(false)
   }
 
+  // ── Add / Edit handlers ──
   const resetForm = () => {
-    setNama('')
-    setJabatan('')
-    setEmail('')
-    setPassword('')
-    setSelectedCategories([])
-    setErrorMsg('')
+    setNama(''); setJabatan(''); setEmail(''); setPassword('')
+    setSelectedCategories([]); setErrorMsg('')
   }
 
-  const openAddDialog = () => {
-    resetForm()
-    setIsEditMode(false)
-    setIsDialogOpen(true)
-  }
+  const openAddDialog = () => { resetForm(); setIsEditMode(false); setIsDialogOpen(true) }
 
   const openEditDialog = (staff: StaffWithAssignments) => {
     resetForm()
@@ -96,10 +109,7 @@ export default function StaffManager() {
     setCurrentStaffId(staff.id)
     setNama(staff.nama)
     setJabatan(staff.jabatan || '')
-    // Extract selected categories
-    const assignments = staff.staff_assignments
-      .map(sa => sa.task_categories?.id)
-      .filter(Boolean) as string[]
+    const assignments = staff.staff_assignments.map(sa => sa.task_categories?.id).filter(Boolean) as string[]
     setSelectedCategories(assignments)
     setIsDialogOpen(true)
   }
@@ -108,66 +118,35 @@ export default function StaffManager() {
     e.preventDefault()
     setIsSubmitting(true)
     setErrorMsg('')
-
     try {
       let userId = currentStaffId
-
       if (!isEditMode) {
-        // 1. Buat auth user + profile lewat serverless function (service role key jalan di server)
         const { data: { session } } = await supabase.auth.getSession()
         if (!session) throw new Error('Sesi tidak ditemukan, silakan login ulang')
-
         const res = await fetch('/api/create-staff-user', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${session.access_token}`,
-          },
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
           body: JSON.stringify({ email, password, nama, jabatan }),
         })
-
         const result = await res.json()
         if (!res.ok) throw new Error(result.error || 'Gagal membuat user')
-
         userId = result.userId
-
       } else {
-        // Edit Mode: Update profile
         if (!userId) throw new Error('Missing user ID')
-        const { error: profileError } = await supabase
-          .from('profiles')
-          .update({
-            nama,
-            jabatan
-          })
-          .eq('id', userId)
-
+        const { error: profileError } = await supabase.from('profiles').update({ nama, jabatan }).eq('id', userId)
         if (profileError) throw new Error(profileError.message)
       }
 
-      // 3. Sync Assignments (Delete old ones, insert new ones)
       if (userId) {
-        await supabase
-          .from('staff_assignments')
-          .delete()
-          .eq('user_id', userId)
-
+        await supabase.from('staff_assignments').delete().eq('user_id', userId)
         if (selectedCategories.length > 0) {
-          const assignmentsToInsert = selectedCategories.map(catId => ({
-            user_id: userId,
-            task_category_id: catId
-          }))
-
-          const { error: assignError } = await supabase
-            .from('staff_assignments')
-            .insert(assignmentsToInsert)
-
+          const { error: assignError } = await supabase.from('staff_assignments')
+            .insert(selectedCategories.map(catId => ({ user_id: userId, task_category_id: catId })))
           if (assignError) throw new Error(assignError.message)
         }
       }
-
       setIsDialogOpen(false)
-      fetchData() // Refresh table
+      fetchData()
     } catch (err: any) {
       setErrorMsg(err.message || 'Terjadi kesalahan')
     } finally {
@@ -176,32 +155,157 @@ export default function StaffManager() {
   }
 
   const toggleCategory = (categoryId: string) => {
-    setSelectedCategories(prev => 
-      prev.includes(categoryId) 
-        ? prev.filter(id => id !== categoryId)
-        : [...prev, categoryId]
-    )
+    setSelectedCategories(prev => prev.includes(categoryId) ? prev.filter(id => id !== categoryId) : [...prev, categoryId])
+  }
+
+  // ── Import Excel handlers ──
+  const openImportDialog = () => {
+    setImportRows([])
+    setImportFileName('')
+    setImportProgress(0)
+    setImportTotal(0)
+    setImportResults([])
+    setImportPhase('upload')
+    setImportError('')
+    setPostImportCards([])
+    setIsImportOpen(true)
+  }
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setImportError('')
+    try {
+      const rows = await parseExcelFile(file)
+      if (rows.length === 0) throw new Error('File Excel kosong atau tidak ada data.')
+      setImportRows(rows)
+      setImportFileName(file.name)
+      setImportPhase('preview')
+    } catch (err: any) {
+      setImportError(err.message)
+    }
+    // Reset file input agar bisa upload file yang sama lagi
+    if (fileInputRef.current) fileInputRef.current.value = ''
+  }
+
+  const handleProcessImport = async () => {
+    setImportPhase('processing')
+    setImportProgress(0)
+    setImportTotal(importRows.length)
+    setImportResults([])
+
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) {
+      setImportError('Sesi habis, silakan login ulang.')
+      setImportPhase('preview')
+      return
+    }
+
+    // Kirim semua ke API bulk
+    try {
+      const staffRows = importRows.map(r => ({
+        nama: r.nama,
+        jabatan: r.jabatan,
+        email: r.email,
+        password: r.password,
+      }))
+
+      // Simulasi progress (API dipanggil sekali, tapi kita animasikan)
+      const progressInterval = setInterval(() => {
+        setImportProgress(prev => Math.min(prev + 1, importRows.length - 1))
+      }, 200)
+
+      const res = await fetch('/api/import-staff-bulk', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ staffRows }),
+      })
+
+      clearInterval(progressInterval)
+      setImportProgress(importRows.length)
+
+      const result = await res.json()
+      if (!res.ok) throw new Error(result.error || 'Gagal import')
+
+      setImportResults(result.results as ImportResult[])
+
+      // Simpan data yang berhasil untuk export kartu
+      const successCards = (result.results as ImportResult[])
+        .filter(r => r.success)
+        .map(r => {
+          const row = importRows.find(ir => ir.email === r.email)
+          return {
+            nama: r.nama,
+            jabatan: row?.jabatan || '',
+            email: r.email,
+            password: row?.password || '',
+          }
+        })
+      setPostImportCards(successCards)
+      setImportPhase('done')
+      fetchData()
+    } catch (err: any) {
+      setImportError(err.message || 'Terjadi kesalahan saat import')
+      setImportPhase('preview')
+    }
+  }
+
+  const handleDownloadAllCards = async () => {
+    if (postImportCards.length === 0) return
+    await generateAccessCardPDF(postImportCards)
+  }
+
+  // ── Kartu Akses Individual ──
+  const openCardDialog = (staff: StaffWithAssignments) => {
+    setCardStaff(staff)
+    setCardPassword('')
+    setShowCardPassword(false)
+    setIsCardDialogOpen(true)
+  }
+
+  const handleGenerateCard = async () => {
+    if (!cardStaff || !cardPassword) return
+    setIsGeneratingCard(true)
+    try {
+      await generateAccessCardPDF([{
+        nama: cardStaff.nama,
+        jabatan: cardStaff.jabatan || '',
+        email: '', // email tidak tersimpan di profiles, tampilkan kosong
+        password: cardPassword,
+      }])
+    } finally {
+      setIsGeneratingCard(false)
+      setIsCardDialogOpen(false)
+    }
   }
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center border-b pb-4">
+      {/* Header */}
+      <div className="flex justify-between items-center border-b pb-4 flex-wrap gap-3">
         <h2 className="text-2xl font-bold">Kelola Staff</h2>
-        <Button onClick={openAddDialog}>Tambah Staff</Button>
+        <div className="flex gap-2 flex-wrap">
+          <Button variant="outline" onClick={openImportDialog}>
+            <Upload className="w-4 h-4 mr-2" />
+            Import Excel
+          </Button>
+          <Button onClick={openAddDialog}>Tambah Staff</Button>
+        </div>
       </div>
 
+      {/* ════════════════════════════════════════════
+          Dialog: Add / Edit Staff
+      ════════════════════════════════════════════ */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{isEditMode ? 'Edit Staff' : 'Tambah Staff Baru'}</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleSave} className="space-y-6 py-4">
-            {errorMsg && (
-              <div className="bg-red-50 text-red-600 p-3 rounded-md text-sm">
-                {errorMsg}
-              </div>
-            )}
-            
+            {errorMsg && <div className="bg-red-50 text-red-600 p-3 rounded-md text-sm">{errorMsg}</div>}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Nama Lengkap</Label>
@@ -211,7 +315,6 @@ export default function StaffManager() {
                 <Label>Jabatan</Label>
                 <Input value={jabatan} onChange={e => setJabatan(e.target.value)} />
               </div>
-              
               {!isEditMode && (
                 <>
                   <div className="space-y-2">
@@ -225,40 +328,265 @@ export default function StaffManager() {
                 </>
               )}
             </div>
-
             <div className="space-y-3">
               <Label className="text-base">Bagian / Urusan (Assignments)</Label>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 border p-4 rounded-md bg-slate-50">
                 {categories.map(cat => (
                   <div key={cat.id} className="flex items-start space-x-2">
-                    <Checkbox 
-                      id={`cat-${cat.id}`} 
-                      checked={selectedCategories.includes(cat.id)}
-                      onCheckedChange={() => toggleCategory(cat.id)}
-                    />
-                    <label 
-                      htmlFor={`cat-${cat.id}`} 
-                      className="text-sm leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
-                    >
-                      {cat.nama_bidang}
-                    </label>
+                    <Checkbox id={`cat-${cat.id}`} checked={selectedCategories.includes(cat.id)} onCheckedChange={() => toggleCategory(cat.id)} />
+                    <label htmlFor={`cat-${cat.id}`} className="text-sm leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer">{cat.nama_bidang}</label>
                   </div>
                 ))}
               </div>
             </div>
-
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>Batal</Button>
-              <Button type="submit" disabled={isSubmitting}>
-                {isSubmitting ? 'Menyimpan...' : 'Simpan'}
-              </Button>
+              <Button type="submit" disabled={isSubmitting}>{isSubmitting ? 'Menyimpan...' : 'Simpan'}</Button>
             </DialogFooter>
           </form>
         </DialogContent>
       </Dialog>
 
+      {/* ════════════════════════════════════════════
+          Dialog: Import Excel
+      ════════════════════════════════════════════ */}
+      <Dialog open={isImportOpen} onOpenChange={v => { if (!v && importPhase !== 'processing') setIsImportOpen(false) }}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileSpreadsheet className="w-5 h-5 text-green-600" />
+              Import Pegawai dari Excel
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-5 py-2">
+            {/* Download Template */}
+            <div className="flex items-center justify-between bg-blue-50 border border-blue-100 rounded-lg p-4">
+              <div>
+                <p className="font-semibold text-blue-800 text-sm">Belum punya template?</p>
+                <p className="text-xs text-blue-600 mt-0.5">Download template Excel, isi data pegawai, lalu upload kembali.</p>
+              </div>
+              <Button variant="outline" size="sm" onClick={downloadExcelTemplate} className="shrink-0 border-blue-300 text-blue-700 hover:bg-blue-100">
+                <Download className="w-4 h-4 mr-1.5" />
+                Download Template
+              </Button>
+            </div>
+
+            {importError && (
+              <div className="bg-red-50 text-red-700 p-3 rounded-md text-sm">{importError}</div>
+            )}
+
+            {/* FASE: Upload */}
+            {importPhase === 'upload' && (
+              <div
+                className="border-2 border-dashed border-gray-300 rounded-xl p-10 text-center cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-colors"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <Upload className="w-10 h-10 text-gray-400 mx-auto mb-3" />
+                <p className="font-semibold text-gray-700">Klik atau seret file Excel ke sini</p>
+                <p className="text-sm text-gray-500 mt-1">Format: .xlsx — Kolom: nama, jabatan, email, password</p>
+                <input ref={fileInputRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={handleFileChange} />
+              </div>
+            )}
+
+            {/* FASE: Preview */}
+            {importPhase === 'preview' && (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="font-semibold text-gray-800">{importFileName}</p>
+                    <p className="text-sm text-gray-500">{importRows.length} baris data ditemukan</p>
+                  </div>
+                  <Button variant="ghost" size="sm" onClick={() => { setImportPhase('upload'); setImportRows([]) }}>
+                    Ganti File
+                  </Button>
+                </div>
+
+                <div className="border rounded-lg overflow-auto max-h-64">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-gray-50">
+                        <TableHead className="w-10">#</TableHead>
+                        <TableHead>Nama</TableHead>
+                        <TableHead>Jabatan</TableHead>
+                        <TableHead>Email</TableHead>
+                        <TableHead>Password</TableHead>
+                        <TableHead>Status</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {importRows.map((row, idx) => {
+                        const isValid = !!row.nama && !!row.email && !!row.password
+                        return (
+                          <TableRow key={idx} className={!isValid ? 'bg-red-50' : ''}>
+                            <TableCell className="text-gray-400 text-xs">{row._rowIndex}</TableCell>
+                            <TableCell>{row.nama || <span className="text-red-500 italic text-xs">kosong</span>}</TableCell>
+                            <TableCell>{row.jabatan || '-'}</TableCell>
+                            <TableCell className="text-xs font-mono">{row.email || <span className="text-red-500 italic text-xs">kosong</span>}</TableCell>
+                            <TableCell className="text-xs font-mono">{row.password ? '••••••' : <span className="text-red-500 italic text-xs">kosong</span>}</TableCell>
+                            <TableCell>
+                              {isValid
+                                ? <span className="text-xs text-green-600 font-semibold">✓ Valid</span>
+                                : <span className="text-xs text-red-600 font-semibold">✗ Wajib diisi</span>
+                              }
+                            </TableCell>
+                          </TableRow>
+                        )
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+
+                <div className="flex justify-end gap-2">
+                  <Button variant="outline" onClick={() => setIsImportOpen(false)}>Batal</Button>
+                  <Button
+                    onClick={handleProcessImport}
+                    disabled={importRows.filter(r => r.nama && r.email && r.password).length === 0}
+                  >
+                    Proses Import ({importRows.filter(r => r.nama && r.email && r.password).length} data valid)
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {/* FASE: Processing */}
+            {importPhase === 'processing' && (
+              <div className="space-y-4 py-4">
+                <div className="flex items-center gap-3">
+                  <Loader2 className="w-5 h-5 animate-spin text-blue-600" />
+                  <p className="font-semibold text-gray-700">Sedang memproses import...</p>
+                </div>
+                <div className="w-full bg-gray-200 rounded-full h-3">
+                  <div
+                    className="bg-blue-600 h-3 rounded-full transition-all duration-300"
+                    style={{ width: importTotal > 0 ? `${(importProgress / importTotal) * 100}%` : '0%' }}
+                  />
+                </div>
+                <p className="text-sm text-gray-500 text-center">{importProgress} / {importTotal} pegawai diproses</p>
+              </div>
+            )}
+
+            {/* FASE: Done */}
+            {importPhase === 'done' && (
+              <div className="space-y-4">
+                {/* Summary */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="bg-green-50 border border-green-200 rounded-lg p-4 text-center">
+                    <p className="text-3xl font-bold text-green-600">{importResults.filter(r => r.success).length}</p>
+                    <p className="text-sm text-green-700 mt-1">Berhasil diimport</p>
+                  </div>
+                  <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-center">
+                    <p className="text-3xl font-bold text-red-600">{importResults.filter(r => !r.success).length}</p>
+                    <p className="text-sm text-red-700 mt-1">Gagal</p>
+                  </div>
+                </div>
+
+                {/* Detail per baris */}
+                <div className="border rounded-lg overflow-auto max-h-52">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-gray-50">
+                        <TableHead>Nama</TableHead>
+                        <TableHead>Email</TableHead>
+                        <TableHead>Status</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {importResults.map((r, idx) => (
+                        <TableRow key={idx}>
+                          <TableCell>{r.nama}</TableCell>
+                          <TableCell className="text-xs font-mono">{r.email}</TableCell>
+                          <TableCell>
+                            {r.success
+                              ? <span className="flex items-center gap-1 text-green-600 text-xs font-semibold"><CheckCircle2 className="w-3.5 h-3.5" /> Berhasil</span>
+                              : <span className="flex items-center gap-1 text-red-600 text-xs"><XCircle className="w-3.5 h-3.5" /> {r.error}</span>
+                            }
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+
+                {/* Export kartu langsung */}
+                {postImportCards.length > 0 && (
+                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+                    <p className="font-semibold text-amber-800 text-sm">⚠️ Download Kartu Akses Sekarang</p>
+                    <p className="text-xs text-amber-700 mt-1 mb-3">
+                      Password hanya tersedia sekarang (tidak disimpan di database). Download kartu akses sebelum menutup dialog ini.
+                    </p>
+                    <Button onClick={handleDownloadAllCards} className="bg-amber-600 hover:bg-amber-700 text-white">
+                      <CreditCard className="w-4 h-4 mr-2" />
+                      Download {postImportCards.length} Kartu Akses (PDF)
+                    </Button>
+                  </div>
+                )}
+
+                <div className="flex justify-end">
+                  <Button onClick={() => setIsImportOpen(false)}>Selesai</Button>
+                </div>
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ════════════════════════════════════════════
+          Dialog: Kartu Akses Individual
+      ════════════════════════════════════════════ */}
+      <Dialog open={isCardDialogOpen} onOpenChange={setIsCardDialogOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <CreditCard className="w-5 h-5 text-blue-600" />
+              Export Kartu Akses
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            {cardStaff && (
+              <div className="bg-gray-50 rounded-lg p-3">
+                <p className="font-semibold">{cardStaff.nama}</p>
+                <p className="text-sm text-gray-500">{cardStaff.jabatan || '-'}</p>
+              </div>
+            )}
+            <div className="space-y-1.5">
+              <Label>Password Staff</Label>
+              <p className="text-xs text-gray-500">Masukkan password untuk dicetak di kartu akses</p>
+              <div className="relative">
+                <Input
+                  type={showCardPassword ? 'text' : 'password'}
+                  value={cardPassword}
+                  onChange={e => setCardPassword(e.target.value)}
+                  placeholder="Masukkan password..."
+                  className="pr-10"
+                />
+                <button
+                  type="button"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  onClick={() => setShowCardPassword(!showCardPassword)}
+                >
+                  {showCardPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsCardDialogOpen(false)}>Batal</Button>
+            <Button onClick={handleGenerateCard} disabled={!cardPassword || isGeneratingCard}>
+              {isGeneratingCard
+                ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Generating...</>
+                : <><Download className="w-4 h-4 mr-2" /> Download PDF</>
+              }
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ════════════════════════════════════════════
+          Tabel Staff
+      ════════════════════════════════════════════ */}
       {loading ? (
-        <div>Loading data...</div>
+        <div className="flex items-center gap-2 text-gray-500"><Loader2 className="w-4 h-4 animate-spin" /> Memuat data...</div>
       ) : (
         <div className="rounded-md border bg-white">
           <Table>
@@ -296,9 +624,15 @@ export default function StaffManager() {
                       </div>
                     </TableCell>
                     <TableCell className="text-right">
-                      <Button variant="outline" size="sm" onClick={() => openEditDialog(staff)}>
-                        Edit
-                      </Button>
+                      <div className="flex gap-2 justify-end">
+                        <Button variant="outline" size="sm" onClick={() => openCardDialog(staff)}>
+                          <CreditCard className="w-3.5 h-3.5 mr-1.5" />
+                          Kartu Akses
+                        </Button>
+                        <Button variant="outline" size="sm" onClick={() => openEditDialog(staff)}>
+                          Edit
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))
