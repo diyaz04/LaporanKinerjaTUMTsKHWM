@@ -43,7 +43,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     // 4. Validasi input dasar
-    const { email, password, nama, jabatan } = req.body || {}
+    const { email, password, nama, jabatan, tipe_karyawan } = req.body || {}
     if (!email || !password || !nama) {
       return res.status(400).json({ error: 'email, password, dan nama wajib diisi' })
     }
@@ -64,6 +64,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       id: authData.user.id,
       nama,
       jabatan: jabatan || null,
+      tipe_karyawan: tipe_karyawan || null,
       role: 'staff',
     })
 

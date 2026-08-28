@@ -1,7 +1,18 @@
+export type TipeKaryawan = 'Staf TU' | 'Wakamad' | 'Laboran' | 'Guru' | 'Lainnya'
+
+export const TIPE_KARYAWAN_OPTIONS: TipeKaryawan[] = [
+  'Staf TU',
+  'Wakamad',
+  'Laboran',
+  'Guru',
+  'Lainnya',
+]
+
 export type Profile = {
   id: string
   nama: string
   jabatan: string | null
+  tipe_karyawan: TipeKaryawan | null
   role: 'admin' | 'staff'
   created_at: string
 }

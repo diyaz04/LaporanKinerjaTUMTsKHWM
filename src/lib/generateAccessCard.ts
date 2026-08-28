@@ -91,7 +91,7 @@ export async function generateAccessCardPDF(
     doc.text('MTs Khairul Wathon Manggala', x + cardW / 2, y + 11, { align: 'center' })
     doc.setFont('helvetica', 'normal')
     doc.setFontSize(8)
-    doc.text('KARTU AKSES SISTEM MONITORING KINERJA TU', x + cardW / 2, y + 19, { align: 'center' })
+    doc.text('KARTU AKSES SISTEM MONITORING KINERJA KARYAWAN', x + cardW / 2, y + 19, { align: 'center' })
 
     // ── Area konten ──
     const contentY = y + 34
@@ -137,7 +137,7 @@ export async function generateAccessCardPDF(
     doc.setFont('helvetica', 'italic')
     doc.setFontSize(9)
     doc.setTextColor(...grayText)
-    const jabatanText = staff.jabatan || 'Staff TU'
+    const jabatanText = staff.jabatan || 'Karyawan'
     doc.text(jabatanText, infoX, infoY)
     infoY += 10
 

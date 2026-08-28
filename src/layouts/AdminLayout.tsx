@@ -21,7 +21,7 @@ export default function AdminLayout() {
 
   const navItems = [
     { name: 'Dashboard', path: '/admin', icon: LayoutDashboard },
-    { name: 'Kelola Staff', path: '/admin/staff', icon: Users },
+    { name: 'Kelola Karyawan', path: '/admin/staff', icon: Users },
     { name: 'Template Tugas', path: '/admin/templates', icon: FileText },
     { name: 'Verifikasi', path: '/admin/verify', icon: CheckSquare },
     { name: 'Laporan', path: '/admin/reports', icon: BarChart },
@@ -47,7 +47,7 @@ export default function AdminLayout() {
         <div className="p-4 border-b flex justify-between items-center bg-white">
           <div className="flex items-center space-x-2">
             <img src="/logo.png" alt="Logo" className="w-8 h-8 object-contain" />
-            <h1 className="text-xl font-bold bg-gradient-to-r from-green-500 to-emerald-600 bg-clip-text text-transparent">Admin TU</h1>
+            <h1 className="text-xl font-bold bg-gradient-to-r from-green-500 to-emerald-600 bg-clip-text text-transparent">Admin MTsU</h1>
           </div>
           <Button variant="ghost" size="icon" className="md:hidden" onClick={() => setIsSidebarOpen(false)}>
             <X className="h-5 w-5" />
@@ -99,7 +99,7 @@ export default function AdminLayout() {
           </Button>
           <div className="flex items-center space-x-2">
             <img src="/logo.png" alt="Logo" className="w-6 h-6 object-contain" />
-            <h1 className="text-lg font-bold">Admin TU</h1>
+            <h1 className="text-lg font-bold">Admin MTsU</h1>
           </div>
         </header>
 

@@ -167,11 +167,11 @@ export default function LandingPage() {
             <div className="space-y-4">
               <h1 className="text-6xl font-extrabold text-slate-900 tracking-tight leading-[1.1]">
                 Portal Kontrol Kinerja <br />
-                <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-600 to-green-500">Tata Usaha</span>
+                <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-600 to-green-500">Karyawan MTsU</span>
               </h1>
               <h2 className="text-2xl font-bold text-emerald-700">MTs KH. A. Wahab Muhsin</h2>
               <p className="text-lg text-slate-500 max-w-lg leading-relaxed">
-                Sistem digitalisasi laporan dan monitoring tugas harian, mingguan, dan bulanan untuk staf tata usaha secara terpadu.
+                Sistem digitalisasi laporan dan monitoring tugas harian, mingguan, dan bulanan untuk seluruh karyawan madrasah — Staf TU, Wakamad, Laboran, dan Guru — secara terpadu.
               </p>
             </div>
             <ul className="space-y-4">
@@ -227,11 +227,11 @@ export default function LandingPage() {
         {/* Heading */}
         <h1 className="text-4xl font-extrabold text-slate-900 tracking-tight leading-[1.15] mb-3">
           Portal Kontrol Kinerja <br />
-          <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-600 to-green-500">Tata Usaha</span>
+          <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-600 to-green-500">Karyawan MTsU</span>
         </h1>
         <h2 className="text-xl font-bold text-emerald-700 mb-3">MTs KH. A. Wahab Muhsin</h2>
         <p className="text-base text-slate-500 leading-relaxed mb-8">
-          Sistem digitalisasi laporan dan monitoring tugas harian, mingguan, dan bulanan untuk staf tata usaha secara terpadu.
+          Sistem digitalisasi laporan dan monitoring tugas harian, mingguan, dan bulanan untuk seluruh karyawan madrasah secara terpadu.
         </p>
 
         {/* Bullets */}

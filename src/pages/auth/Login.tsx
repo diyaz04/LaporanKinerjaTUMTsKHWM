@@ -52,9 +52,9 @@ export default function Login() {
             <img src="/logo.png" alt="Logo MTs" className="w-20 h-20 object-contain" />
           </div>
           <CardTitle className="text-2xl font-bold bg-gradient-to-r from-green-500 to-emerald-600 bg-clip-text text-transparent">
-            Kontrol Kinerja TU
+            Portal Kinerja Karyawan MTsU
           </CardTitle>
-          <CardDescription>Masuk untuk mengelola dan melaporkan tugas harian Anda.</CardDescription>
+          <CardDescription>Masuk untuk mengelola dan melaporkan tugas Anda.</CardDescription>
         </CardHeader>
         <form onSubmit={handleLogin}>
           <CardContent className="space-y-4">

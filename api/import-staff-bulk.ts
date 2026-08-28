@@ -12,6 +12,7 @@ const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
 type StaffRow = {
   nama: string
   jabatan?: string
+  tipe_karyawan?: string
   email: string
   password: string
 }
@@ -57,7 +58,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     for (let i = 0; i < staffRows.length; i++) {
       const row: StaffRow = staffRows[i]
-      const { nama, jabatan, email, password } = row
+      const { nama, jabatan, tipe_karyawan, email, password } = row
 
       if (!nama || !email || !password) {
         results.push({ index: i, nama: nama || '-', email: email || '-', success: false, error: 'nama, email, dan password wajib diisi' })
@@ -82,6 +83,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           id: authData.user.id,
           nama,
           jabatan: jabatan || null,
+          tipe_karyawan: tipe_karyawan || null,
           role: 'staff',
         })
 

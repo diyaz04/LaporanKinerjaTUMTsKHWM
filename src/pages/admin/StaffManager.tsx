@@ -19,8 +19,11 @@ import {
   DialogTitle,
   DialogFooter,
 } from '../../components/ui/dialog'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select'
 import { Upload, Download, FileSpreadsheet, CreditCard, CheckCircle2, XCircle, Loader2, Eye, EyeOff } from 'lucide-react'
 import type { Profile, TaskCategory } from '../../types/database'
+import { TIPE_KARYAWAN_OPTIONS } from '../../types/database'
+import type { TipeKaryawan } from '../../types/database'
 import { downloadExcelTemplate, parseExcelFile } from '../../lib/excelTemplate'
 import type { StaffImportRow } from '../../lib/excelTemplate'
 import { generateAccessCardPDF } from '../../lib/generateAccessCard'
@@ -38,10 +41,19 @@ type ImportResult = {
   userId?: string
 }
 
+const BADGE_COLORS: Record<string, string> = {
+  'Staf TU': 'bg-blue-50 text-blue-700 border-blue-100',
+  'Wakamad': 'bg-purple-50 text-purple-700 border-purple-100',
+  'Laboran': 'bg-orange-50 text-orange-700 border-orange-100',
+  'Guru': 'bg-teal-50 text-teal-700 border-teal-100',
+  'Lainnya': 'bg-gray-50 text-gray-600 border-gray-200',
+}
+
 export default function StaffManager() {
   const [staffList, setStaffList] = useState<StaffWithAssignments[]>([])
   const [categories, setCategories] = useState<TaskCategory[]>([])
   const [loading, setLoading] = useState(true)
+  const [filterTipe, setFilterTipe] = useState<string>('all')
 
   // ── Dialog: Add / Edit Staff ──
   const [isDialogOpen, setIsDialogOpen] = useState(false)
@@ -49,6 +61,7 @@ export default function StaffManager() {
   const [currentStaffId, setCurrentStaffId] = useState<string | null>(null)
   const [nama, setNama] = useState('')
   const [jabatan, setJabatan] = useState('')
+  const [tipeKaryawan, setTipeKaryawan] = useState<TipeKaryawan | ''>('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [selectedCategories, setSelectedCategories] = useState<string[]>([])
@@ -64,7 +77,6 @@ export default function StaffManager() {
   const [importResults, setImportResults] = useState<ImportResult[]>([])
   const [importPhase, setImportPhase] = useState<'upload' | 'preview' | 'processing' | 'done'>('upload')
   const [importError, setImportError] = useState('')
-  // Simpan data import (nama + password) untuk export kartu langsung setelah import
   const [postImportCards, setPostImportCards] = useState<{ nama: string; jabatan: string; email: string; password: string }[]>([])
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -81,10 +93,7 @@ export default function StaffManager() {
 
   const fetchData = async () => {
     setLoading(true)
-    const { data: catData } = await supabase
-      .from('task_categories')
-      .select('*')
-      .order('nomor_urut')
+    const { data: catData } = await supabase.from('task_categories').select('*').order('nomor_urut')
     if (catData) setCategories(catData)
 
     const { data: staffData } = await supabase
@@ -95,9 +104,14 @@ export default function StaffManager() {
     setLoading(false)
   }
 
+  // Filtered list
+  const filteredList = filterTipe === 'all'
+    ? staffList
+    : staffList.filter(s => (s.tipe_karyawan || 'Lainnya') === filterTipe)
+
   // ── Add / Edit handlers ──
   const resetForm = () => {
-    setNama(''); setJabatan(''); setEmail(''); setPassword('')
+    setNama(''); setJabatan(''); setTipeKaryawan(''); setEmail(''); setPassword('')
     setSelectedCategories([]); setErrorMsg('')
   }
 
@@ -109,6 +123,7 @@ export default function StaffManager() {
     setCurrentStaffId(staff.id)
     setNama(staff.nama)
     setJabatan(staff.jabatan || '')
+    setTipeKaryawan(staff.tipe_karyawan || '')
     const assignments = staff.staff_assignments.map(sa => sa.task_categories?.id).filter(Boolean) as string[]
     setSelectedCategories(assignments)
     setIsDialogOpen(true)
@@ -126,14 +141,16 @@ export default function StaffManager() {
         const res = await fetch('/api/create-staff-user', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
-          body: JSON.stringify({ email, password, nama, jabatan }),
+          body: JSON.stringify({ email, password, nama, jabatan, tipe_karyawan: tipeKaryawan || null }),
         })
         const result = await res.json()
         if (!res.ok) throw new Error(result.error || 'Gagal membuat user')
         userId = result.userId
       } else {
         if (!userId) throw new Error('Missing user ID')
-        const { error: profileError } = await supabase.from('profiles').update({ nama, jabatan }).eq('id', userId)
+        const { error: profileError } = await supabase.from('profiles')
+          .update({ nama, jabatan, tipe_karyawan: tipeKaryawan || null })
+          .eq('id', userId)
         if (profileError) throw new Error(profileError.message)
       }
 
@@ -160,14 +177,8 @@ export default function StaffManager() {
 
   // ── Import Excel handlers ──
   const openImportDialog = () => {
-    setImportRows([])
-    setImportFileName('')
-    setImportProgress(0)
-    setImportTotal(0)
-    setImportResults([])
-    setImportPhase('upload')
-    setImportError('')
-    setPostImportCards([])
+    setImportRows([]); setImportFileName(''); setImportProgress(0); setImportTotal(0)
+    setImportResults([]); setImportPhase('upload'); setImportError(''); setPostImportCards([])
     setIsImportOpen(true)
   }
 
@@ -184,7 +195,6 @@ export default function StaffManager() {
     } catch (err: any) {
       setImportError(err.message)
     }
-    // Reset file input agar bisa upload file yang sama lagi
     if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
@@ -195,32 +205,20 @@ export default function StaffManager() {
     setImportResults([])
 
     const { data: { session } } = await supabase.auth.getSession()
-    if (!session) {
-      setImportError('Sesi habis, silakan login ulang.')
-      setImportPhase('preview')
-      return
-    }
+    if (!session) { setImportError('Sesi habis, silakan login ulang.'); setImportPhase('preview'); return }
 
-    // Kirim semua ke API bulk
     try {
       const staffRows = importRows.map(r => ({
-        nama: r.nama,
-        jabatan: r.jabatan,
-        email: r.email,
-        password: r.password,
+        nama: r.nama, jabatan: r.jabatan, tipe_karyawan: r.tipe_karyawan, email: r.email, password: r.password,
       }))
 
-      // Simulasi progress (API dipanggil sekali, tapi kita animasikan)
       const progressInterval = setInterval(() => {
         setImportProgress(prev => Math.min(prev + 1, importRows.length - 1))
       }, 200)
 
       const res = await fetch('/api/import-staff-bulk', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${session.access_token}`,
-        },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
         body: JSON.stringify({ staffRows }),
       })
 
@@ -232,17 +230,11 @@ export default function StaffManager() {
 
       setImportResults(result.results as ImportResult[])
 
-      // Simpan data yang berhasil untuk export kartu
       const successCards = (result.results as ImportResult[])
         .filter(r => r.success)
         .map(r => {
           const row = importRows.find(ir => ir.email === r.email)
-          return {
-            nama: r.nama,
-            jabatan: row?.jabatan || '',
-            email: r.email,
-            password: row?.password || '',
-          }
+          return { nama: r.nama, jabatan: row?.jabatan || '', email: r.email, password: row?.password || '' }
         })
       setPostImportCards(successCards)
       setImportPhase('done')
@@ -260,22 +252,14 @@ export default function StaffManager() {
 
   // ── Kartu Akses Individual ──
   const openCardDialog = (staff: StaffWithAssignments) => {
-    setCardStaff(staff)
-    setCardPassword('')
-    setShowCardPassword(false)
-    setIsCardDialogOpen(true)
+    setCardStaff(staff); setCardPassword(''); setShowCardPassword(false); setIsCardDialogOpen(true)
   }
 
   const handleGenerateCard = async () => {
     if (!cardStaff || !cardPassword) return
     setIsGeneratingCard(true)
     try {
-      await generateAccessCardPDF([{
-        nama: cardStaff.nama,
-        jabatan: cardStaff.jabatan || '',
-        email: '', // email tidak tersimpan di profiles, tampilkan kosong
-        password: cardPassword,
-      }])
+      await generateAccessCardPDF([{ nama: cardStaff.nama, jabatan: cardStaff.jabatan || '', email: '', password: cardPassword }])
     } finally {
       setIsGeneratingCard(false)
       setIsCardDialogOpen(false)
@@ -286,23 +270,54 @@ export default function StaffManager() {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex justify-between items-center border-b pb-4 flex-wrap gap-3">
-        <h2 className="text-2xl font-bold">Kelola Staff</h2>
+        <div>
+          <h2 className="text-2xl font-bold">Kelola Karyawan</h2>
+          <p className="text-sm text-gray-500 mt-0.5">Staf TU, Wakamad, Laboran, Guru, dan lainnya</p>
+        </div>
         <div className="flex gap-2 flex-wrap">
           <Button variant="outline" onClick={openImportDialog}>
             <Upload className="w-4 h-4 mr-2" />
             Import Excel
           </Button>
-          <Button onClick={openAddDialog}>Tambah Staff</Button>
+          <Button onClick={openAddDialog}>Tambah Karyawan</Button>
         </div>
       </div>
 
+      {/* Filter Tipe */}
+      <div className="flex gap-2 flex-wrap">
+        <button
+          onClick={() => setFilterTipe('all')}
+          className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors ${filterTipe === 'all' ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}
+        >
+          Semua ({staffList.length})
+        </button>
+        {TIPE_KARYAWAN_OPTIONS.map(tipe => {
+          const count = staffList.filter(s => s.tipe_karyawan === tipe).length
+          const colors = BADGE_COLORS[tipe] || 'bg-gray-50 text-gray-600 border-gray-200'
+          const activeColors = tipe === 'Staf TU' ? 'bg-blue-600 text-white border-blue-600'
+            : tipe === 'Wakamad' ? 'bg-purple-600 text-white border-purple-600'
+            : tipe === 'Laboran' ? 'bg-orange-600 text-white border-orange-600'
+            : tipe === 'Guru' ? 'bg-teal-600 text-white border-teal-600'
+            : 'bg-gray-600 text-white border-gray-600'
+          return (
+            <button
+              key={tipe}
+              onClick={() => setFilterTipe(tipe)}
+              className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors ${filterTipe === tipe ? activeColors : colors}`}
+            >
+              {tipe} ({count})
+            </button>
+          )
+        })}
+      </div>
+
       {/* ════════════════════════════════════════════
-          Dialog: Add / Edit Staff
+          Dialog: Add / Edit Karyawan
       ════════════════════════════════════════════ */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{isEditMode ? 'Edit Staff' : 'Tambah Staff Baru'}</DialogTitle>
+            <DialogTitle>{isEditMode ? 'Edit Karyawan' : 'Tambah Karyawan Baru'}</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleSave} className="space-y-6 py-4">
             {errorMsg && <div className="bg-red-50 text-red-600 p-3 rounded-md text-sm">{errorMsg}</div>}
@@ -312,9 +327,23 @@ export default function StaffManager() {
                 <Input value={nama} onChange={e => setNama(e.target.value)} required />
               </div>
               <div className="space-y-2">
-                <Label>Jabatan</Label>
-                <Input value={jabatan} onChange={e => setJabatan(e.target.value)} />
+                <Label>Tipe Karyawan</Label>
+                <Select value={tipeKaryawan} onValueChange={v => setTipeKaryawan(v as TipeKaryawan)}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Pilih tipe karyawan..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {TIPE_KARYAWAN_OPTIONS.map(opt => (
+                      <SelectItem key={opt} value={opt}>{opt}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
+              <div className="space-y-2 md:col-span-2">
+                <Label>Jabatan <span className="text-gray-400 font-normal">(opsional)</span></Label>
+                <Input value={jabatan} onChange={e => setJabatan(e.target.value)} placeholder="mis. Kepala TU, Wakil Kepala Kurikulum, Pengelola Lab IPA" />
+              </div>
+
               {!isEditMode && (
                 <>
                   <div className="space-y-2">
@@ -355,16 +384,15 @@ export default function StaffManager() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <FileSpreadsheet className="w-5 h-5 text-green-600" />
-              Import Pegawai dari Excel
+              Import Karyawan dari Excel
             </DialogTitle>
           </DialogHeader>
 
           <div className="space-y-5 py-2">
-            {/* Download Template */}
             <div className="flex items-center justify-between bg-blue-50 border border-blue-100 rounded-lg p-4">
               <div>
                 <p className="font-semibold text-blue-800 text-sm">Belum punya template?</p>
-                <p className="text-xs text-blue-600 mt-0.5">Download template Excel, isi data pegawai, lalu upload kembali.</p>
+                <p className="text-xs text-blue-600 mt-0.5">Download template Excel, isi data karyawan (Staf TU, Wakamad, Laboran, dll), lalu upload.</p>
               </div>
               <Button variant="outline" size="sm" onClick={downloadExcelTemplate} className="shrink-0 border-blue-300 text-blue-700 hover:bg-blue-100">
                 <Download className="w-4 h-4 mr-1.5" />
@@ -372,9 +400,7 @@ export default function StaffManager() {
               </Button>
             </div>
 
-            {importError && (
-              <div className="bg-red-50 text-red-700 p-3 rounded-md text-sm">{importError}</div>
-            )}
+            {importError && <div className="bg-red-50 text-red-700 p-3 rounded-md text-sm">{importError}</div>}
 
             {/* FASE: Upload */}
             {importPhase === 'upload' && (
@@ -384,7 +410,7 @@ export default function StaffManager() {
               >
                 <Upload className="w-10 h-10 text-gray-400 mx-auto mb-3" />
                 <p className="font-semibold text-gray-700">Klik atau seret file Excel ke sini</p>
-                <p className="text-sm text-gray-500 mt-1">Format: .xlsx — Kolom: nama, jabatan, email, password</p>
+                <p className="text-sm text-gray-500 mt-1">Format: .xlsx — Kolom: nama, jabatan, tipe_karyawan, email, password</p>
                 <input ref={fileInputRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={handleFileChange} />
               </div>
             )}
@@ -397,17 +423,15 @@ export default function StaffManager() {
                     <p className="font-semibold text-gray-800">{importFileName}</p>
                     <p className="text-sm text-gray-500">{importRows.length} baris data ditemukan</p>
                   </div>
-                  <Button variant="ghost" size="sm" onClick={() => { setImportPhase('upload'); setImportRows([]) }}>
-                    Ganti File
-                  </Button>
+                  <Button variant="ghost" size="sm" onClick={() => { setImportPhase('upload'); setImportRows([]) }}>Ganti File</Button>
                 </div>
-
                 <div className="border rounded-lg overflow-auto max-h-64">
                   <Table>
                     <TableHeader>
                       <TableRow className="bg-gray-50">
                         <TableHead className="w-10">#</TableHead>
                         <TableHead>Nama</TableHead>
+                        <TableHead>Tipe</TableHead>
                         <TableHead>Jabatan</TableHead>
                         <TableHead>Email</TableHead>
                         <TableHead>Password</TableHead>
@@ -421,6 +445,12 @@ export default function StaffManager() {
                           <TableRow key={idx} className={!isValid ? 'bg-red-50' : ''}>
                             <TableCell className="text-gray-400 text-xs">{row._rowIndex}</TableCell>
                             <TableCell>{row.nama || <span className="text-red-500 italic text-xs">kosong</span>}</TableCell>
+                            <TableCell>
+                              {row.tipe_karyawan
+                                ? <span className={`text-xs px-2 py-0.5 rounded-full border font-semibold ${BADGE_COLORS[row.tipe_karyawan] || 'bg-gray-50 text-gray-600 border-gray-200'}`}>{row.tipe_karyawan}</span>
+                                : <span className="text-gray-400 text-xs">-</span>
+                              }
+                            </TableCell>
                             <TableCell>{row.jabatan || '-'}</TableCell>
                             <TableCell className="text-xs font-mono">{row.email || <span className="text-red-500 italic text-xs">kosong</span>}</TableCell>
                             <TableCell className="text-xs font-mono">{row.password ? '••••••' : <span className="text-red-500 italic text-xs">kosong</span>}</TableCell>
@@ -436,13 +466,9 @@ export default function StaffManager() {
                     </TableBody>
                   </Table>
                 </div>
-
                 <div className="flex justify-end gap-2">
                   <Button variant="outline" onClick={() => setIsImportOpen(false)}>Batal</Button>
-                  <Button
-                    onClick={handleProcessImport}
-                    disabled={importRows.filter(r => r.nama && r.email && r.password).length === 0}
-                  >
+                  <Button onClick={handleProcessImport} disabled={importRows.filter(r => r.nama && r.email && r.password).length === 0}>
                     Proses Import ({importRows.filter(r => r.nama && r.email && r.password).length} data valid)
                   </Button>
                 </div>
@@ -457,19 +483,15 @@ export default function StaffManager() {
                   <p className="font-semibold text-gray-700">Sedang memproses import...</p>
                 </div>
                 <div className="w-full bg-gray-200 rounded-full h-3">
-                  <div
-                    className="bg-blue-600 h-3 rounded-full transition-all duration-300"
-                    style={{ width: importTotal > 0 ? `${(importProgress / importTotal) * 100}%` : '0%' }}
-                  />
+                  <div className="bg-blue-600 h-3 rounded-full transition-all duration-300" style={{ width: importTotal > 0 ? `${(importProgress / importTotal) * 100}%` : '0%' }} />
                 </div>
-                <p className="text-sm text-gray-500 text-center">{importProgress} / {importTotal} pegawai diproses</p>
+                <p className="text-sm text-gray-500 text-center">{importProgress} / {importTotal} karyawan diproses</p>
               </div>
             )}
 
             {/* FASE: Done */}
             {importPhase === 'done' && (
               <div className="space-y-4">
-                {/* Summary */}
                 <div className="grid grid-cols-2 gap-3">
                   <div className="bg-green-50 border border-green-200 rounded-lg p-4 text-center">
                     <p className="text-3xl font-bold text-green-600">{importResults.filter(r => r.success).length}</p>
@@ -480,8 +502,6 @@ export default function StaffManager() {
                     <p className="text-sm text-red-700 mt-1">Gagal</p>
                   </div>
                 </div>
-
-                {/* Detail per baris */}
                 <div className="border rounded-lg overflow-auto max-h-52">
                   <Table>
                     <TableHeader>
@@ -507,21 +527,16 @@ export default function StaffManager() {
                     </TableBody>
                   </Table>
                 </div>
-
-                {/* Export kartu langsung */}
                 {postImportCards.length > 0 && (
                   <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
                     <p className="font-semibold text-amber-800 text-sm">⚠️ Download Kartu Akses Sekarang</p>
-                    <p className="text-xs text-amber-700 mt-1 mb-3">
-                      Password hanya tersedia sekarang (tidak disimpan di database). Download kartu akses sebelum menutup dialog ini.
-                    </p>
+                    <p className="text-xs text-amber-700 mt-1 mb-3">Password hanya tersedia sekarang (tidak disimpan di database). Download kartu akses sebelum menutup dialog ini.</p>
                     <Button onClick={handleDownloadAllCards} className="bg-amber-600 hover:bg-amber-700 text-white">
                       <CreditCard className="w-4 h-4 mr-2" />
                       Download {postImportCards.length} Kartu Akses (PDF)
                     </Button>
                   </div>
                 )}
-
                 <div className="flex justify-end">
                   <Button onClick={() => setIsImportOpen(false)}>Selesai</Button>
                 </div>
@@ -545,8 +560,17 @@ export default function StaffManager() {
           <div className="space-y-4 py-2">
             {cardStaff && (
               <div className="bg-gray-50 rounded-lg p-3">
-                <p className="font-semibold">{cardStaff.nama}</p>
-                <p className="text-sm text-gray-500">{cardStaff.jabatan || '-'}</p>
+                <div className="flex items-center gap-2">
+                  <div>
+                    <p className="font-semibold">{cardStaff.nama}</p>
+                    <p className="text-sm text-gray-500">{cardStaff.jabatan || 'Karyawan'}</p>
+                  </div>
+                  {cardStaff.tipe_karyawan && (
+                    <span className={`ml-auto text-xs px-2 py-0.5 rounded-full border font-semibold ${BADGE_COLORS[cardStaff.tipe_karyawan] || ''}`}>
+                      {cardStaff.tipe_karyawan}
+                    </span>
+                  )}
+                </div>
               </div>
             )}
             <div className="space-y-1.5">
@@ -583,7 +607,7 @@ export default function StaffManager() {
       </Dialog>
 
       {/* ════════════════════════════════════════════
-          Tabel Staff
+          Tabel Karyawan
       ════════════════════════════════════════════ */}
       {loading ? (
         <div className="flex items-center gap-2 text-gray-500"><Loader2 className="w-4 h-4 animate-spin" /> Memuat data...</div>
@@ -593,22 +617,29 @@ export default function StaffManager() {
             <TableHeader>
               <TableRow>
                 <TableHead>Nama</TableHead>
+                <TableHead>Tipe</TableHead>
                 <TableHead>Jabatan</TableHead>
                 <TableHead>Bagian yang di-assign</TableHead>
                 <TableHead className="text-right">Aksi</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {staffList.length === 0 ? (
+              {filteredList.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={4} className="text-center text-gray-500 py-6">
-                    Belum ada data staff.
+                  <TableCell colSpan={5} className="text-center text-gray-500 py-6">
+                    {filterTipe === 'all' ? 'Belum ada data karyawan.' : `Tidak ada karyawan dengan tipe "${filterTipe}".`}
                   </TableCell>
                 </TableRow>
               ) : (
-                staffList.map((staff) => (
+                filteredList.map((staff) => (
                   <TableRow key={staff.id}>
                     <TableCell className="font-medium">{staff.nama}</TableCell>
+                    <TableCell>
+                      {staff.tipe_karyawan
+                        ? <span className={`text-xs px-2 py-1 rounded-full border font-semibold ${BADGE_COLORS[staff.tipe_karyawan] || 'bg-gray-50 text-gray-600 border-gray-200'}`}>{staff.tipe_karyawan}</span>
+                        : <span className="text-xs text-gray-400 italic">-</span>
+                      }
+                    </TableCell>
                     <TableCell>{staff.jabatan || '-'}</TableCell>
                     <TableCell>
                       <div className="flex flex-wrap gap-1">
@@ -629,9 +660,7 @@ export default function StaffManager() {
                           <CreditCard className="w-3.5 h-3.5 mr-1.5" />
                           Kartu Akses
                         </Button>
-                        <Button variant="outline" size="sm" onClick={() => openEditDialog(staff)}>
-                          Edit
-                        </Button>
+                        <Button variant="outline" size="sm" onClick={() => openEditDialog(staff)}>Edit</Button>
                       </div>
                     </TableCell>
                   </TableRow>

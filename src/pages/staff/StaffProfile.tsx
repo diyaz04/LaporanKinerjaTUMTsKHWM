@@ -16,7 +16,10 @@ export default function StaffProfile() {
             <User className="w-10 h-10" />
           </div>
           <CardTitle className="text-2xl">{profile.nama}</CardTitle>
-          <p className="text-gray-500">{profile.jabatan || 'Staff TU'}</p>
+          <p className="text-gray-500">{profile.jabatan || 'Karyawan'}</p>
+          {profile.tipe_karyawan && (
+            <span className="inline-block mt-1 px-3 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-700">{profile.tipe_karyawan}</span>
+          )}
         </CardHeader>
         <CardContent className="space-y-4 pt-4">
           <div className="border-t pt-4">

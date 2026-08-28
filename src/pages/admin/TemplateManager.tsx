@@ -325,7 +325,7 @@ export default function TemplateManager() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="font-medium text-sm truncate">{staff.nama}</p>
-                      <p className="text-xs text-gray-400">{staff.jabatan || 'Staff TU'}</p>
+                      <p className="text-xs text-gray-400">{staff.jabatan || 'Karyawan'}</p>
                     </div>
                     {checked && <Badge className="bg-emerald-100 text-emerald-700 text-xs">Ditugaskan</Badge>}
                   </li>

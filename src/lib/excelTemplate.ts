@@ -6,12 +6,13 @@ import * as XLSX from 'xlsx'
  */
 export function downloadExcelTemplate() {
   // Header kolom
-  const headers = ['nama', 'jabatan', 'email', 'password']
+  const headers = ['nama', 'jabatan', 'tipe_karyawan', 'email', 'password']
 
   // Contoh data (2 baris agar admin paham formatnya)
   const exampleRows = [
-    ['Ahmad Fauzi', 'Staf TU', 'ahmad.fauzi@mtskhwm.sch.id', 'Password123'],
-    ['Siti Rahayu', 'Bendahara', 'siti.rahayu@mtskhwm.sch.id', 'Password456'],
+    ['Ahmad Fauzi', 'Kepala TU', 'Staf TU', 'ahmad.fauzi@mtskhwm.sch.id', 'Password123'],
+    ['Siti Rahayu', 'Wakil Kepala Kurikulum', 'Wakamad', 'siti.rahayu@mtskhwm.sch.id', 'Password456'],
+    ['Budi Santoso', 'Pengelola Lab IPA', 'Laboran', 'budi.santoso@mtskhwm.sch.id', 'Password789'],
   ]
 
   const worksheetData = [headers, ...exampleRows]
@@ -20,39 +21,38 @@ export function downloadExcelTemplate() {
   // Atur lebar kolom
   worksheet['!cols'] = [
     { wch: 30 }, // nama
-    { wch: 25 }, // jabatan
+    { wch: 28 }, // jabatan
+    { wch: 18 }, // tipe_karyawan
     { wch: 35 }, // email
     { wch: 20 }, // password
   ]
 
-  // Style header (bold) — xlsx community edition tidak mendukung rich style,
-  // tapi kita bisa pakai SheetJS Pro workaround via komentar cell
-  // Untuk sekarang cukup format data saja
-
   const workbook = XLSX.utils.book_new()
-  XLSX.utils.book_append_sheet(workbook, worksheet, 'Data Pegawai')
+  XLSX.utils.book_append_sheet(workbook, worksheet, 'Data Karyawan')
 
   // Tambah sheet petunjuk
   const instruksiData = [
-    ['PETUNJUK PENGISIAN TEMPLATE IMPORT PEGAWAI'],
+    ['PETUNJUK PENGISIAN TEMPLATE IMPORT KARYAWAN'],
     [''],
-    ['Kolom', 'Keterangan', 'Wajib?'],
-    ['nama', 'Nama lengkap pegawai/guru', 'Ya'],
-    ['jabatan', 'Jabatan atau bidang tugas (boleh kosong)', 'Tidak'],
-    ['email', 'Email untuk login ke sistem (harus unik)', 'Ya'],
-    ['password', 'Password awal (minimal 6 karakter)', 'Ya'],
+    ['Kolom', 'Keterangan', 'Nilai yang diperbolehkan', 'Wajib?'],
+    ['nama', 'Nama lengkap karyawan', '-', 'Ya'],
+    ['jabatan', 'Jabatan spesifik (mis. Kepala TU, Wakil Kurikulum)', '-', 'Tidak'],
+    ['tipe_karyawan', 'Kategori karyawan', 'Staf TU | Wakamad | Laboran | Guru | Lainnya', 'Tidak'],
+    ['email', 'Email untuk login ke sistem (harus unik)', '-', 'Ya'],
+    ['password', 'Password awal (minimal 6 karakter)', '-', 'Ya'],
     [''],
     ['CATATAN:'],
     ['- Hapus baris contoh sebelum upload'],
     ['- Jangan ubah nama kolom di baris pertama'],
     ['- Email tidak boleh sama dengan akun yang sudah ada'],
     ['- Simpan file dalam format .xlsx'],
+    ['- Kolom tipe_karyawan diisi salah satu: Staf TU, Wakamad, Laboran, Guru, Lainnya'],
   ]
   const instrSheet = XLSX.utils.aoa_to_sheet(instruksiData)
-  instrSheet['!cols'] = [{ wch: 15 }, { wch: 45 }, { wch: 10 }]
+  instrSheet['!cols'] = [{ wch: 18 }, { wch: 45 }, { wch: 40 }, { wch: 10 }]
   XLSX.utils.book_append_sheet(workbook, instrSheet, 'Petunjuk')
 
-  XLSX.writeFile(workbook, 'template_import_pegawai.xlsx')
+  XLSX.writeFile(workbook, 'template_import_karyawan.xlsx')
 }
 
 /**
@@ -61,6 +61,7 @@ export function downloadExcelTemplate() {
 export type StaffImportRow = {
   nama: string
   jabatan: string
+  tipe_karyawan: string
   email: string
   password: string
   _rowIndex: number
@@ -88,6 +89,7 @@ export async function parseExcelFile(file: File): Promise<StaffImportRow[]> {
         const rows: StaffImportRow[] = jsonData.map((row, index) => ({
           nama: String(row['nama'] || '').trim(),
           jabatan: String(row['jabatan'] || '').trim(),
+          tipe_karyawan: String(row['tipe_karyawan'] || '').trim(),
           email: String(row['email'] || '').trim().toLowerCase(),
           password: String(row['password'] || '').trim(),
           _rowIndex: index + 2, // +2 karena row 1 = header di Excel
