@@ -21,6 +21,7 @@ export type TaskCategory = {
   id: string
   nomor_urut: number | null
   nama_bidang: string
+  parent_group?: string | null
   created_at: string
 }
 

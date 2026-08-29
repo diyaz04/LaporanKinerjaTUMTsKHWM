@@ -100,6 +100,7 @@ export default function TemplateManager() {
   const [catId, setCatId] = useState<string | null>(null)
   const [catNama, setCatNama] = useState('')
   const [catUrut, setCatUrut] = useState<number>(0)
+  const [catParentGroup, setCatParentGroup] = useState<string>('')
 
   // Dialog States for Template
   const [tplDialogOpen, setTplDialogOpen] = useState(false)
@@ -164,19 +165,21 @@ export default function TemplateManager() {
   // --- Category CRUD ---
   const openCatDialog = (cat?: TaskCategory) => {
     if (cat) {
-      setCatId(cat.id); setCatNama(cat.nama_bidang); setCatUrut(cat.nomor_urut || 0)
+      setCatId(cat.id); setCatNama(cat.nama_bidang); setCatUrut(cat.nomor_urut || 0); setCatParentGroup(cat.parent_group || '')
     } else {
-      setCatId(null); setCatNama(''); setCatUrut(categories.length + 1)
+      setCatId(null); setCatNama(''); setCatUrut(categories.length + 1); setCatParentGroup('')
     }
     setCatDialogOpen(true)
   }
 
   const saveCategory = async (e: React.FormEvent) => {
     e.preventDefault()
+    const pg = catParentGroup === 'none' ? null : (catParentGroup || null)
+    const payload = { nama_bidang: catNama, nomor_urut: catUrut, parent_group: pg }
     if (catId) {
-      await supabase.from('task_categories').update({ nama_bidang: catNama, nomor_urut: catUrut }).eq('id', catId)
+      await supabase.from('task_categories').update(payload).eq('id', catId)
     } else {
-      await supabase.from('task_categories').insert({ nama_bidang: catNama, nomor_urut: catUrut })
+      await supabase.from('task_categories').insert(payload)
     }
     setCatDialogOpen(false)
     fetchData()
@@ -356,8 +359,17 @@ export default function TemplateManager() {
   const invalidCount = importRows.filter(r => !r._valid).length
 
   const mappedGroups = CATEGORY_GROUPS.map(group => {
-    const mainCat = categories.find(c => c.nama_bidang.toLowerCase().trim() === group.mainMatch)
-    const subCats = categories.filter(c => group.subMatches.includes(c.nama_bidang.toLowerCase().trim()))
+    // 1. Check if there is an explicit parent_group match
+    // 2. Fallback to name matching if parent_group is null
+    const isMainCat = (c: TaskCategory) => c.parent_group === group.name && c.nama_bidang === group.name 
+                                        || (!c.parent_group && c.nama_bidang.toLowerCase().trim() === group.mainMatch)
+    
+    const isSubCat = (c: TaskCategory) => c.parent_group === group.name && c.nama_bidang !== group.name
+                                       || (!c.parent_group && group.subMatches.includes(c.nama_bidang.toLowerCase().trim()))
+
+    const mainCat = categories.find(isMainCat)
+    const subCats = categories.filter(isSubCat)
+    
     return {
       name: group.name,
       mainCat,
@@ -590,11 +602,26 @@ export default function TemplateManager() {
           </DialogHeader>
           <form onSubmit={saveCategory} className="space-y-4">
             <div className="space-y-2">
-              <Label>Nama Bidang</Label>
-              <Input value={catNama} onChange={(e) => setCatNama(e.target.value)} required />
+              <Label>Nama Bidang / Sub-bidang</Label>
+              <Input value={catNama} onChange={(e) => setCatNama(e.target.value)} required placeholder="Contoh: Pembelajaran & Akademik" />
             </div>
             <div className="space-y-2">
-              <Label>Nomor Urut</Label>
+              <Label>Grup Utama (Parent Group)</Label>
+              <Select value={catParentGroup} onValueChange={setCatParentGroup}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Pilih Grup (Opsional)" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Tanpa Grup (Berdiri Sendiri)</SelectItem>
+                  {CATEGORY_GROUPS.map(g => (
+                    <SelectItem key={g.name} value={g.name}>{g.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-gray-500">Pilih grup utama jika bidang ini merupakan sub-bagian (misal: "Pembelajaran & Akademik" masuk ke "Wakamad Kurikulum").</p>
+            </div>
+            <div className="space-y-2">
+              <Label>Nomor Urut Tampil</Label>
               <Input type="number" value={catUrut} onChange={(e) => setCatUrut(parseInt(e.target.value))} required />
             </div>
             <DialogFooter>

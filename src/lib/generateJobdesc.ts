@@ -12,6 +12,7 @@ type TaskCategory = {
   id: string
   nama_bidang: string
   nomor_urut: number
+  parent_group?: string | null
   task_templates: TaskTemplate[]
 }
 
@@ -145,8 +146,15 @@ export async function generateJobdescPDF(staff: StaffJobdescData) {
   } else {
     // Group logic
     const mappedGroups = CATEGORY_GROUPS.map(group => {
-      const mainCat = staff.categories.find(c => c.nama_bidang.toLowerCase().trim() === group.mainMatch)
-      const subCats = staff.categories.filter(c => group.subMatches.includes(c.nama_bidang.toLowerCase().trim()))
+      const isMainCat = (c: TaskCategory) => c.parent_group === group.name && c.nama_bidang === group.name 
+                                          || (!c.parent_group && c.nama_bidang.toLowerCase().trim() === group.mainMatch)
+      
+      const isSubCat = (c: TaskCategory) => c.parent_group === group.name && c.nama_bidang !== group.name
+                                         || (!c.parent_group && group.subMatches.includes(c.nama_bidang.toLowerCase().trim()))
+
+      const mainCat = staff.categories.find(isMainCat)
+      const subCats = staff.categories.filter(isSubCat)
+      
       return {
         name: group.name,
         mainCat,
