@@ -18,6 +18,26 @@ async function generateQRDataURL(text: string): Promise<string> {
 }
 
 /**
+ * Fetch logo dari /logo.png dan return sebagai base64 data URL.
+ * Return null jika gagal agar kop tetap tampil tanpa logo.
+ */
+async function fetchLogoBase64(): Promise<string | null> {
+  try {
+    const res = await fetch('/logo.png')
+    if (!res.ok) return null
+    const blob = await res.blob()
+    return new Promise((resolve) => {
+      const reader = new FileReader()
+      reader.onload = () => resolve(reader.result as string)
+      reader.onerror = () => resolve(null)
+      reader.readAsDataURL(blob)
+    })
+  } catch {
+    return null
+  }
+}
+
+/**
  * Generate PDF format surat resmi kop madrasah.
  * 1 halaman A4 per orang.
  */
@@ -48,6 +68,10 @@ export async function generateAccessCardPDF(
     day: 'numeric', month: 'long', year: 'numeric'
   })
 
+  // Fetch logo sekali untuk semua halaman
+  const logoBase64 = await fetchLogoBase64()
+  const logoSize = 22 // mm — ukuran logo di kop
+
   for (let i = 0; i < staffList.length; i++) {
     const staff = staffList[i]
     if (i > 0) doc.addPage()
@@ -64,20 +88,31 @@ export async function generateAccessCardPDF(
     doc.setFillColor(...green)
     doc.rect(0, 4, pageW, 1.5, 'F')
 
-    // Nama madrasah — tengah
-    let kopY = 18
+    // Logo madrasah — kiri
+    const logoX = mL
+    const logoY = 7
+    if (logoBase64) {
+      // Lingkaran putih sebagai background logo agar terlihat di semua background
+      doc.setFillColor(...white)
+      doc.circle(logoX + logoSize / 2, logoY + logoSize / 2, logoSize / 2 + 1, 'F')
+      doc.addImage(logoBase64, 'PNG', logoX, logoY, logoSize, logoSize)
+    }
+
+    // Nama madrasah — tengah (sisakan ruang untuk logo di kiri)
+    const textCenterX = logoBase64 ? (mL + logoSize + pageW - mR) / 2 : pageW / 2
+    let kopY = 15
     doc.setFont('helvetica', 'bold')
     doc.setFontSize(16)
     doc.setTextColor(...navy)
-    doc.text('MTs KHAIRUL WATHON MANGGALA', pageW / 2, kopY, { align: 'center' })
+    doc.text('MTs KH A WAHAB MUHSIN', textCenterX, kopY, { align: 'center' })
 
     kopY += 6
     doc.setFont('helvetica', 'normal')
     doc.setFontSize(8.5)
     doc.setTextColor(...grayText)
     doc.text(
-      'Jl. Pesantren No. 1, Manggala  •  Telp. (021) xxxxx  •  mtskhwm.sch.id',
-      pageW / 2, kopY, { align: 'center' }
+      'Ds. Sukarapih, Kec. Sukarame, Kab. Tasikmalaya 46461',
+      textCenterX, kopY, { align: 'center' }
     )
 
     // Garis pemisah kop — double line style

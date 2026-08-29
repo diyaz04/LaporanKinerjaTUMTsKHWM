@@ -83,6 +83,7 @@ export default function StaffManager() {
   // ── Dialog: Kartu Akses Individual ──
   const [isCardDialogOpen, setIsCardDialogOpen] = useState(false)
   const [cardStaff, setCardStaff] = useState<StaffWithAssignments | null>(null)
+  const [cardEmail, setCardEmail] = useState('')
   const [cardPassword, setCardPassword] = useState('')
   const [showCardPassword, setShowCardPassword] = useState(false)
   const [isGeneratingCard, setIsGeneratingCard] = useState(false)
@@ -252,14 +253,14 @@ export default function StaffManager() {
 
   // ── Kartu Akses Individual ──
   const openCardDialog = (staff: StaffWithAssignments) => {
-    setCardStaff(staff); setCardPassword(''); setShowCardPassword(false); setIsCardDialogOpen(true)
+    setCardStaff(staff); setCardEmail(''); setCardPassword(''); setShowCardPassword(false); setIsCardDialogOpen(true)
   }
 
   const handleGenerateCard = async () => {
-    if (!cardStaff || !cardPassword) return
+    if (!cardStaff || !cardPassword || !cardEmail) return
     setIsGeneratingCard(true)
     try {
-      await generateAccessCardPDF([{ nama: cardStaff.nama, jabatan: cardStaff.jabatan || '', email: '', password: cardPassword }])
+      await generateAccessCardPDF([{ nama: cardStaff.nama, jabatan: cardStaff.jabatan || '', email: cardEmail, password: cardPassword }])
     } finally {
       setIsGeneratingCard(false)
       setIsCardDialogOpen(false)
@@ -574,8 +575,18 @@ export default function StaffManager() {
               </div>
             )}
             <div className="space-y-1.5">
-              <Label>Password Staff</Label>
-              <p className="text-xs text-gray-500">Masukkan password untuk dicetak di kartu akses</p>
+              <Label>Email Login</Label>
+              <p className="text-xs text-gray-500">Email akun yang digunakan untuk login ke sistem</p>
+              <Input
+                type="email"
+                value={cardEmail}
+                onChange={e => setCardEmail(e.target.value)}
+                placeholder="nama@madrasah.sch.id"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Password</Label>
+              <p className="text-xs text-gray-500">Password akun untuk dicetak di surat akses</p>
               <div className="relative">
                 <Input
                   type={showCardPassword ? 'text' : 'password'}
@@ -596,7 +607,7 @@ export default function StaffManager() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsCardDialogOpen(false)}>Batal</Button>
-            <Button onClick={handleGenerateCard} disabled={!cardPassword || isGeneratingCard}>
+            <Button onClick={handleGenerateCard} disabled={!cardEmail || !cardPassword || isGeneratingCard}>
               {isGeneratingCard
                 ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Generating...</>
                 : <><Download className="w-4 h-4 mr-2" /> Download PDF</>
