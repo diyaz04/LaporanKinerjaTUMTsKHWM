@@ -20,14 +20,14 @@ import {
   DialogFooter,
 } from '../../components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select'
-import { Upload, Download, FileSpreadsheet, CreditCard, CheckCircle2, XCircle, Loader2, Eye, EyeOff } from 'lucide-react'
+import { Upload, Download, FileSpreadsheet, CheckCircle2, XCircle, Loader2, CreditCard, Eye, EyeOff, FileText } from 'lucide-react'
 import type { Profile, TaskCategory } from '../../types/database'
 import { TIPE_KARYAWAN_OPTIONS } from '../../types/database'
 import type { TipeKaryawan } from '../../types/database'
 import { downloadExcelTemplate, parseExcelFile } from '../../lib/excelTemplate'
 import type { StaffImportRow } from '../../lib/excelTemplate'
 import { generateAccessCardPDF } from '../../lib/generateAccessCard'
-
+import { generateJobdescPDF } from '../../lib/generateJobdesc'
 type StaffWithAssignments = Profile & {
   staff_assignments: { task_categories: TaskCategory | null }[]
 }
@@ -264,6 +264,44 @@ export default function StaffManager() {
     } finally {
       setIsGeneratingCard(false)
       setIsCardDialogOpen(false)
+    }
+  }
+
+  const [isGeneratingJobdesc, setIsGeneratingJobdesc] = useState<string | null>(null)
+
+  const handleDownloadTugas = async (staff: StaffWithAssignments) => {
+    setIsGeneratingJobdesc(staff.id)
+    try {
+      // Fetch full task templates for assigned categories
+      const categoryIds = staff.staff_assignments.map(sa => sa.task_categories?.id).filter(Boolean) as string[]
+      
+      const categoriesData = []
+      for (const catId of categoryIds) {
+        // Get category info
+        const { data: cat } = await supabase.from('task_categories').select('*').eq('id', catId).single()
+        if (cat) {
+          // Get templates
+          const { data: tpls } = await supabase.from('task_templates').select('*').eq('category_id', catId)
+          categoriesData.push({
+            id: cat.id,
+            nama_bidang: cat.nama_bidang,
+            nomor_urut: cat.nomor_urut || 0,
+            task_templates: tpls || []
+          })
+        }
+      }
+
+      await generateJobdescPDF({
+        nama: staff.nama,
+        jabatan: staff.jabatan || '',
+        tipe_karyawan: staff.tipe_karyawan || 'Karyawan',
+        categories: categoriesData
+      })
+    } catch (err) {
+      console.error(err)
+      alert('Gagal mendownload rincian tugas.')
+    } finally {
+      setIsGeneratingJobdesc(null)
     }
   }
 
@@ -667,6 +705,10 @@ export default function StaffManager() {
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex gap-2 justify-end">
+                        <Button variant="outline" size="sm" onClick={() => handleDownloadTugas(staff)} disabled={isGeneratingJobdesc === staff.id}>
+                          {isGeneratingJobdesc === staff.id ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : <FileText className="w-3.5 h-3.5 mr-1.5" />}
+                          Cetak Tugas
+                        </Button>
                         <Button variant="outline" size="sm" onClick={() => openCardDialog(staff)}>
                           <CreditCard className="w-3.5 h-3.5 mr-1.5" />
                           Kartu Akses

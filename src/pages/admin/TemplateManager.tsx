@@ -94,7 +94,7 @@ export default function TemplateManager() {
   const [importTotal, setImportTotal] = useState(0)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const [activeTab, setActiveTab] = useState('harian')
+  const [activeTab, setActiveTab] = useState('')
 
   useEffect(() => {
     fetchData()
@@ -108,7 +108,12 @@ export default function TemplateManager() {
       supabase.from('profiles').select('*').eq('role', 'staff').order('nama'),
       supabase.from('staff_assignments').select('user_id, task_category_id'),
     ])
-    if (catRes.data) setCategories(catRes.data)
+    if (catRes.data) {
+      setCategories(catRes.data)
+      if (!activeTab && catRes.data.length > 0) {
+        setActiveTab(catRes.data[0].id)
+      }
+    }
     if (tplRes.data) setTemplates(tplRes.data)
     if (staffRes.data) setStaffList(staffRes.data)
 
@@ -152,14 +157,14 @@ export default function TemplateManager() {
   }
 
   // --- Template CRUD ---
-  const openTplDialog = (periode: string, tpl?: TaskTemplate) => {
+  const openTplDialog = (periode: string, tpl?: TaskTemplate, defaultCategoryId?: string) => {
     if (tpl) {
       setTplId(tpl.id); setTplCategory(tpl.category_id); setTplPeriode(tpl.periode)
       setTplDeskripsi(tpl.deskripsi_tugas); setTplUrut(tpl.urutan_tampil || 0)
     } else {
-      setTplId(null); setTplCategory(categories.length > 0 ? categories[0].id : '')
+      setTplId(null); setTplCategory(defaultCategoryId || (categories.length > 0 ? categories[0].id : ''))
       setTplPeriode(periode); setTplDeskripsi('')
-      setTplUrut(templates.filter(t => t.periode === periode).length + 1)
+      setTplUrut(templates.filter(t => t.category_id === (defaultCategoryId || categories[0]?.id)).length + 1)
     }
     setTplDialogOpen(true)
   }
@@ -646,92 +651,100 @@ export default function TemplateManager() {
       </Dialog>
 
       {/* ════════════ Tabs ════════════ */}
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="flex flex-wrap h-auto">
-          {PERIODES.map(p => (
-            <TabsTrigger key={p} value={p} className="capitalize">{p}</TabsTrigger>
-          ))}
-        </TabsList>
+      {categories.length === 0 ? (
+        <div className="text-center text-gray-500 py-8 bg-white rounded-lg border">
+          Belum ada bidang/kategori tugas.
+          <div className="mt-3">
+            <Button size="sm" variant="outline" onClick={() => openCatDialog()}>
+              <Plus className="w-3.5 h-3.5 mr-1.5" /> Tambah Bidang
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <Tabs value={activeTab} onValueChange={setActiveTab}>
+          <TabsList className="flex flex-wrap h-auto">
+            {categories.map(cat => (
+              <TabsTrigger key={cat.id} value={cat.id}>{cat.nama_bidang}</TabsTrigger>
+            ))}
+          </TabsList>
 
-        {PERIODES.map(periode => {
-          const pTemplates = templates.filter(t => t.periode === periode)
-          return (
-            <TabsContent key={periode} value={periode} className="mt-6 space-y-6">
-              <div className="flex justify-between items-center">
-                <h3 className="text-lg font-semibold capitalize">Tugas {periode}
-                  <span className="ml-2 text-sm font-normal text-gray-400">({pTemplates.length} tugas)</span>
-                </h3>
-                <Button size="sm" onClick={() => openTplDialog(periode)}>
-                  <Plus className="w-4 h-4 mr-1" /> Tambah Tugas
-                </Button>
-              </div>
+          {categories.map(cat => {
+            const catTemplates = templates.filter(t => t.category_id === cat.id)
+            const assignedStaff = (assignments[cat.id] || [])
+              .map(uid => staffList.find(s => s.id === uid))
+              .filter(Boolean) as Profile[]
 
-              {pTemplates.length === 0 ? (
-                <div className="text-center text-gray-500 py-8 bg-white rounded-lg border">
-                  Belum ada tugas untuk periode ini.
-                  <div className="mt-3">
-                    <Button size="sm" variant="outline" onClick={openImportDialog}>
-                      <Upload className="w-3.5 h-3.5 mr-1.5" /> Import dari Excel
-                    </Button>
-                  </div>
-                </div>
-              ) : (
-                <div className="space-y-6">
-                  {categories.map(cat => {
-                    const catTemplates = pTemplates.filter(t => t.category_id === cat.id)
-                    if (catTemplates.length === 0) return null
-                    const assignedStaff = (assignments[cat.id] || [])
-                      .map(uid => staffList.find(s => s.id === uid))
-                      .filter(Boolean) as Profile[]
-                    return (
-                      <div key={cat.id} className="bg-white rounded-lg shadow-sm border overflow-hidden">
-                        <div className="bg-slate-50 px-4 py-3 border-b flex flex-col sm:flex-row sm:items-center gap-2">
-                          <div className="flex-1">
-                            <span className="font-semibold text-slate-800">{cat.nama_bidang}</span>
-                            <span className="ml-2 text-xs text-gray-400">{catTemplates.length} tugas</span>
-                          </div>
-                          <div className="flex items-center gap-2 flex-wrap">
-                            {assignedStaff.length > 0 ? (
-                              <div className="flex flex-wrap gap-1">
-                                {assignedStaff.map(s => (
-                                  <Badge key={s.id} variant="secondary" className="bg-emerald-100 text-emerald-700 text-xs">{s.nama.split(' ')[0]}</Badge>
-                                ))}
-                              </div>
-                            ) : (
-                              <span className="text-xs text-gray-400 italic">Belum ada petugas</span>
-                            )}
-                            <Button size="sm" variant="outline" onClick={() => openAssignDialog(cat)}
-                              className="h-7 px-2 text-xs border-emerald-300 text-emerald-700 hover:bg-emerald-50">
-                              <Users className="w-3 h-3 mr-1" /> Atur Petugas
-                            </Button>
-                          </div>
-                        </div>
-                        <ul className="divide-y">
-                          {catTemplates.map(t => (
-                            <li key={t.id} className="p-4 hover:bg-slate-50 transition-colors flex justify-between items-start gap-4">
-                              <div className="flex-1">
-                                <p className="text-sm text-gray-800 whitespace-pre-wrap">{t.deskripsi_tugas}</p>
-                              </div>
-                              <div className="flex items-center space-x-1 shrink-0">
-                                <Button variant="ghost" size="sm" onClick={() => openTplDialog(periode, t)} className="h-8 px-2 text-blue-600">
-                                  <Edit2 className="w-4 h-4" />
-                                </Button>
-                                <Button variant="ghost" size="sm" onClick={() => deleteTemplate(t.id)} className="h-8 px-2 text-red-600">
-                                  <Trash2 className="w-4 h-4" />
-                                </Button>
-                              </div>
-                            </li>
+            return (
+              <TabsContent key={cat.id} value={cat.id} className="mt-6 space-y-6">
+                <div className="bg-white rounded-lg shadow-sm border overflow-hidden p-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+                    <div>
+                      <h3 className="text-lg font-semibold">{cat.nama_bidang}</h3>
+                      <p className="text-sm text-gray-500">{catTemplates.length} tugas total</p>
+                    </div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <div className="text-sm text-gray-600 mr-2">Petugas:</div>
+                      {assignedStaff.length > 0 ? (
+                        <div className="flex flex-wrap gap-1">
+                          {assignedStaff.map(s => (
+                            <Badge key={s.id} variant="secondary" className="bg-emerald-100 text-emerald-700">{s.nama.split(' ')[0]}</Badge>
                           ))}
-                        </ul>
-                      </div>
-                    )
-                  })}
+                        </div>
+                      ) : (
+                        <span className="text-sm text-gray-400 italic">Belum ada</span>
+                      )}
+                      <Button size="sm" variant="outline" onClick={() => openAssignDialog(cat)} className="ml-2 h-8">
+                        <Users className="w-4 h-4 mr-2" /> Atur Petugas
+                      </Button>
+                      <Button size="sm" onClick={() => openTplDialog('harian', undefined, cat.id)}>
+                        <Plus className="w-4 h-4 mr-2" /> Tambah Tugas
+                      </Button>
+                    </div>
+                  </div>
+
+                  {catTemplates.length === 0 ? (
+                    <div className="text-center text-gray-500 py-8 border rounded-lg bg-slate-50">
+                      Belum ada tugas di bidang ini.
+                    </div>
+                  ) : (
+                    <div className="space-y-6">
+                      {PERIODES.map(periode => {
+                        const pTemplates = catTemplates.filter(t => t.periode === periode)
+                        if (pTemplates.length === 0) return null
+
+                        return (
+                          <div key={periode} className="border rounded-lg overflow-hidden">
+                            <div className={`px-4 py-2 border-b font-semibold capitalize ${PERIODE_COLORS[periode] || 'bg-slate-100 text-slate-800'}`}>
+                              {periode} ({pTemplates.length})
+                            </div>
+                            <ul className="divide-y bg-white">
+                              {pTemplates.map(t => (
+                                <li key={t.id} className="p-4 hover:bg-slate-50 transition-colors flex justify-between items-start gap-4">
+                                  <div className="flex-1">
+                                    <p className="text-sm text-gray-800 whitespace-pre-wrap">{t.deskripsi_tugas}</p>
+                                  </div>
+                                  <div className="flex items-center space-x-1 shrink-0">
+                                    <Button variant="ghost" size="sm" onClick={() => openTplDialog(periode, t, cat.id)} className="h-8 px-2 text-blue-600">
+                                      <Edit2 className="w-4 h-4" />
+                                    </Button>
+                                    <Button variant="ghost" size="sm" onClick={() => deleteTemplate(t.id)} className="h-8 px-2 text-red-600">
+                                      <Trash2 className="w-4 h-4" />
+                                    </Button>
+                                  </div>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
                 </div>
-              )}
-            </TabsContent>
-          )
-        })}
-      </Tabs>
+              </TabsContent>
+            )
+          })}
+        </Tabs>
+      )}
     </div>
   )
 }
