@@ -44,6 +44,39 @@ const PERIODE_COLORS: Record<string, string> = {
   insidentil: 'bg-red-50 text-red-700',
 }
 
+export const CATEGORY_GROUPS = [
+  {
+    name: 'Wakamad Kurikulum',
+    mainMatch: 'wakamad kurikulum',
+    subMatches: ['pembelajaran & akademik', 'layanan perpustakaan', 'evaluasi & perangkat guru', 'pembelajaran & kbm digital']
+  },
+  {
+    name: 'Wakamad Kesiswaan',
+    mainMatch: 'wakamad kesiswaan',
+    subMatches: ['kesiswaan & karakter', 'kesiswaan (apresiasi)']
+  },
+  {
+    name: 'Wakamad Sarpras',
+    mainMatch: 'wakamad sarpras',
+    subMatches: ['aset & digital kbm', 'sarana & pemeliharaan', 'sarana & pemliharaan']
+  },
+  {
+    name: 'Wakamad Humas',
+    mainMatch: 'wakamad humas',
+    subMatches: ['kehumasan & kemitraan', 'sosialisasi & marketing', 'sosisalisasi & marketing', 'web & berita madrasah', 'konten media sosial']
+  },
+  {
+    name: 'Bendahara',
+    mainMatch: 'bendahara',
+    subMatches: ['bendahara keuangan', 'pelaporan keuangan', 'kebendaharaan operasional', 'kebendaharaan operasioanal']
+  },
+  {
+    name: 'Ketatausahaan',
+    mainMatch: 'ketatausahaan',
+    subMatches: ['persuratan & umum', 'kearsipan pusat', 'sekretariat kemitraan']
+  }
+]
+
 type AssignmentMap = Record<string, string[]> // category_id -> user_id[]
 
 type ImportResult = {
@@ -321,6 +354,29 @@ export default function TemplateManager() {
 
   const validCount = importRows.filter(r => r._valid).length
   const invalidCount = importRows.filter(r => !r._valid).length
+
+  const mappedGroups = CATEGORY_GROUPS.map(group => {
+    const mainCat = categories.find(c => c.nama_bidang.toLowerCase().trim() === group.mainMatch)
+    const subCats = categories.filter(c => group.subMatches.includes(c.nama_bidang.toLowerCase().trim()))
+    return {
+      name: group.name,
+      mainCat,
+      subCats,
+      allCats: [mainCat, ...subCats].filter(Boolean) as TaskCategory[]
+    }
+  }).filter(g => g.allCats.length > 0)
+
+  const mappedCatIds = new Set<string>()
+  mappedGroups.forEach(g => g.allCats.forEach(c => mappedCatIds.add(c.id)))
+
+  const unmappedCats = categories.filter(c => !mappedCatIds.has(c.id))
+
+  const tabList = [
+    ...mappedGroups.map(g => ({ id: g.name, label: g.name, isGroup: true, cats: g.allCats, mainCat: g.mainCat })),
+    ...unmappedCats.map(c => ({ id: c.id, label: c.nama_bidang, isGroup: false, cats: [c], mainCat: c }))
+  ]
+
+  const currentTab = tabList.find(t => t.id === activeTab) ? activeTab : (tabList[0]?.id || '')
 
   return (
     <div className="space-y-6">
@@ -651,7 +707,8 @@ export default function TemplateManager() {
       </Dialog>
 
       {/* ════════════ Tabs ════════════ */}
-      {categories.length === 0 ? (
+      {/* ════════════ Tabs ════════════ */}
+      {tabList.length === 0 ? (
         <div className="text-center text-gray-500 py-8 bg-white rounded-lg border">
           Belum ada bidang/kategori tugas.
           <div className="mt-3">
@@ -661,85 +718,92 @@ export default function TemplateManager() {
           </div>
         </div>
       ) : (
-        <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <Tabs value={currentTab} onValueChange={setActiveTab}>
           <TabsList className="flex flex-wrap h-auto">
-            {categories.map(cat => (
-              <TabsTrigger key={cat.id} value={cat.id}>{cat.nama_bidang}</TabsTrigger>
+            {tabList.map(tab => (
+              <TabsTrigger key={tab.id} value={tab.id}>{tab.label}</TabsTrigger>
             ))}
           </TabsList>
 
-          {categories.map(cat => {
-            const catTemplates = templates.filter(t => t.category_id === cat.id)
-            const assignedStaff = (assignments[cat.id] || [])
-              .map(uid => staffList.find(s => s.id === uid))
-              .filter(Boolean) as Profile[]
-
+          {tabList.map(tab => {
             return (
-              <TabsContent key={cat.id} value={cat.id} className="mt-6 space-y-6">
-                <div className="bg-white rounded-lg shadow-sm border overflow-hidden p-4">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-                    <div>
-                      <h3 className="text-lg font-semibold">{cat.nama_bidang}</h3>
-                      <p className="text-sm text-gray-500">{catTemplates.length} tugas total</p>
-                    </div>
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <div className="text-sm text-gray-600 mr-2">Petugas:</div>
-                      {assignedStaff.length > 0 ? (
-                        <div className="flex flex-wrap gap-1">
-                          {assignedStaff.map(s => (
-                            <Badge key={s.id} variant="secondary" className="bg-emerald-100 text-emerald-700">{s.nama.split(' ')[0]}</Badge>
-                          ))}
+              <TabsContent key={tab.id} value={tab.id} className="mt-6 space-y-8">
+                {tab.cats.map(cat => {
+                  const isMain = tab.isGroup && tab.mainCat?.id === cat.id
+                  const catTemplates = templates.filter(t => t.category_id === cat.id)
+                  const assignedStaff = (assignments[cat.id] || [])
+                    .map(uid => staffList.find(s => s.id === uid))
+                    .filter(Boolean) as Profile[]
+
+                  return (
+                    <div key={cat.id} className={`bg-white rounded-lg shadow-sm border overflow-hidden p-4 ${isMain ? 'ring-2 ring-emerald-500/20' : ''}`}>
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+                        <div>
+                          <h3 className={`font-semibold ${isMain ? 'text-lg text-emerald-800' : 'text-md text-slate-800'}`}>
+                            {isMain ? `Tugas Pokok: ${cat.nama_bidang}` : cat.nama_bidang}
+                          </h3>
+                          <p className="text-sm text-gray-500">{catTemplates.length} tugas total</p>
+                        </div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <div className="text-sm text-gray-600 mr-2">Petugas:</div>
+                          {assignedStaff.length > 0 ? (
+                            <div className="flex flex-wrap gap-1">
+                              {assignedStaff.map(s => (
+                                <Badge key={s.id} variant="secondary" className="bg-emerald-100 text-emerald-700">{s.nama.split(' ')[0]}</Badge>
+                              ))}
+                            </div>
+                          ) : (
+                            <span className="text-sm text-gray-400 italic">Belum ada</span>
+                          )}
+                          <Button size="sm" variant="outline" onClick={() => openAssignDialog(cat)} className="ml-2 h-8">
+                            <Users className="w-4 h-4 mr-2" /> Atur Petugas
+                          </Button>
+                          <Button size="sm" onClick={() => openTplDialog('harian', undefined, cat.id)}>
+                            <Plus className="w-4 h-4 mr-2" /> Tambah Tugas
+                          </Button>
+                        </div>
+                      </div>
+
+                      {catTemplates.length === 0 ? (
+                        <div className="text-center text-gray-500 py-6 border rounded-lg bg-slate-50 text-sm">
+                          Belum ada tugas di {isMain ? 'kategori utama ini' : 'sub-bidang ini'}.
                         </div>
                       ) : (
-                        <span className="text-sm text-gray-400 italic">Belum ada</span>
+                        <div className="space-y-6">
+                          {PERIODES.map(periode => {
+                            const pTemplates = catTemplates.filter(t => t.periode === periode)
+                            if (pTemplates.length === 0) return null
+
+                            return (
+                              <div key={periode} className="border rounded-lg overflow-hidden">
+                                <div className={`px-4 py-2 border-b font-semibold capitalize ${PERIODE_COLORS[periode] || 'bg-slate-100 text-slate-800'}`}>
+                                  {periode} ({pTemplates.length})
+                                </div>
+                                <ul className="divide-y bg-white">
+                                  {pTemplates.map(t => (
+                                    <li key={t.id} className="p-4 hover:bg-slate-50 transition-colors flex justify-between items-start gap-4">
+                                      <div className="flex-1">
+                                        <p className="text-sm text-gray-800 whitespace-pre-wrap">{t.deskripsi_tugas}</p>
+                                      </div>
+                                      <div className="flex items-center space-x-1 shrink-0">
+                                        <Button variant="ghost" size="sm" onClick={() => openTplDialog(periode, t, cat.id)} className="h-8 px-2 text-blue-600">
+                                          <Edit2 className="w-4 h-4" />
+                                        </Button>
+                                        <Button variant="ghost" size="sm" onClick={() => deleteTemplate(t.id)} className="h-8 px-2 text-red-600">
+                                          <Trash2 className="w-4 h-4" />
+                                        </Button>
+                                      </div>
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )
+                          })}
+                        </div>
                       )}
-                      <Button size="sm" variant="outline" onClick={() => openAssignDialog(cat)} className="ml-2 h-8">
-                        <Users className="w-4 h-4 mr-2" /> Atur Petugas
-                      </Button>
-                      <Button size="sm" onClick={() => openTplDialog('harian', undefined, cat.id)}>
-                        <Plus className="w-4 h-4 mr-2" /> Tambah Tugas
-                      </Button>
                     </div>
-                  </div>
-
-                  {catTemplates.length === 0 ? (
-                    <div className="text-center text-gray-500 py-8 border rounded-lg bg-slate-50">
-                      Belum ada tugas di bidang ini.
-                    </div>
-                  ) : (
-                    <div className="space-y-6">
-                      {PERIODES.map(periode => {
-                        const pTemplates = catTemplates.filter(t => t.periode === periode)
-                        if (pTemplates.length === 0) return null
-
-                        return (
-                          <div key={periode} className="border rounded-lg overflow-hidden">
-                            <div className={`px-4 py-2 border-b font-semibold capitalize ${PERIODE_COLORS[periode] || 'bg-slate-100 text-slate-800'}`}>
-                              {periode} ({pTemplates.length})
-                            </div>
-                            <ul className="divide-y bg-white">
-                              {pTemplates.map(t => (
-                                <li key={t.id} className="p-4 hover:bg-slate-50 transition-colors flex justify-between items-start gap-4">
-                                  <div className="flex-1">
-                                    <p className="text-sm text-gray-800 whitespace-pre-wrap">{t.deskripsi_tugas}</p>
-                                  </div>
-                                  <div className="flex items-center space-x-1 shrink-0">
-                                    <Button variant="ghost" size="sm" onClick={() => openTplDialog(periode, t, cat.id)} className="h-8 px-2 text-blue-600">
-                                      <Edit2 className="w-4 h-4" />
-                                    </Button>
-                                    <Button variant="ghost" size="sm" onClick={() => deleteTemplate(t.id)} className="h-8 px-2 text-red-600">
-                                      <Trash2 className="w-4 h-4" />
-                                    </Button>
-                                  </div>
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
-                        )
-                      })}
-                    </div>
-                  )}
-                </div>
+                  )
+                })}
               </TabsContent>
             )
           })}

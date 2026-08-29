@@ -1,5 +1,5 @@
 import jsPDF from 'jspdf'
-import 'jspdf-autotable'
+import autoTable from 'jspdf-autotable'
 
 type TaskTemplate = {
   id: string
@@ -30,6 +30,39 @@ const PERIODE_ORDER = {
   berkala: 5,
   insidentil: 6
 } as Record<string, number>
+
+const CATEGORY_GROUPS = [
+  {
+    name: 'Wakamad Kurikulum',
+    mainMatch: 'wakamad kurikulum',
+    subMatches: ['pembelajaran & akademik', 'layanan perpustakaan', 'evaluasi & perangkat guru', 'pembelajaran & kbm digital']
+  },
+  {
+    name: 'Wakamad Kesiswaan',
+    mainMatch: 'wakamad kesiswaan',
+    subMatches: ['kesiswaan & karakter', 'kesiswaan (apresiasi)']
+  },
+  {
+    name: 'Wakamad Sarpras',
+    mainMatch: 'wakamad sarpras',
+    subMatches: ['aset & digital kbm', 'sarana & pemeliharaan', 'sarana & pemliharaan']
+  },
+  {
+    name: 'Wakamad Humas',
+    mainMatch: 'wakamad humas',
+    subMatches: ['kehumasan & kemitraan', 'sosialisasi & marketing', 'sosisalisasi & marketing', 'web & berita madrasah', 'konten media sosial']
+  },
+  {
+    name: 'Bendahara',
+    mainMatch: 'bendahara',
+    subMatches: ['bendahara keuangan', 'pelaporan keuangan', 'kebendaharaan operasional', 'kebendaharaan operasioanal']
+  },
+  {
+    name: 'Ketatausahaan',
+    mainMatch: 'ketatausahaan',
+    subMatches: ['persuratan & umum', 'kearsipan pusat', 'sekretariat kemitraan']
+  }
+]
 
 export async function generateJobdescPDF(staff: StaffJobdescData) {
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
@@ -110,46 +143,76 @@ export async function generateJobdescPDF(staff: StaffJobdescData) {
     doc.setTextColor(...grayText)
     doc.text('Belum ada bidang tugas yang ditugaskan kepada karyawan ini.', mL, curY)
   } else {
-    // Sort categories
-    const sortedCats = [...staff.categories].sort((a, b) => (a.nomor_urut || 0) - (b.nomor_urut || 0))
+    // Group logic
+    const mappedGroups = CATEGORY_GROUPS.map(group => {
+      const mainCat = staff.categories.find(c => c.nama_bidang.toLowerCase().trim() === group.mainMatch)
+      const subCats = staff.categories.filter(c => group.subMatches.includes(c.nama_bidang.toLowerCase().trim()))
+      return {
+        name: group.name,
+        mainCat,
+        subCats,
+        allCats: [mainCat, ...subCats].filter(Boolean) as TaskCategory[]
+      }
+    }).filter(g => g.allCats.length > 0)
+
+    const mappedCatIds = new Set<string>()
+    mappedGroups.forEach(g => g.allCats.forEach(c => mappedCatIds.add(c.id)))
+
+    const unmappedCats = staff.categories.filter(c => !mappedCatIds.has(c.id))
+    
+    const groupsToPrint = [
+      ...mappedGroups.map(g => ({ label: g.name, isGroup: true, cats: g.allCats, mainCat: g.mainCat })),
+      ...unmappedCats.map(c => ({ label: c.nama_bidang, isGroup: false, cats: [c], mainCat: c }))
+    ]
 
     const tableBody: any[] = []
 
-    sortedCats.forEach(cat => {
-      // Row header kategori
-      tableBody.push([{
-        content: `Bidang: ${cat.nama_bidang.toUpperCase()}`,
-        colSpan: 3,
-        styles: { fillColor: [240, 244, 248], fontStyle: 'bold', textColor: navy }
-      }])
-
-      if (cat.task_templates.length === 0) {
+    groupsToPrint.forEach(group => {
+      // Print Group Header if it's a main group
+      if (group.isGroup) {
         tableBody.push([{
-          content: 'Belum ada tugas di bidang ini.',
+          content: `GROUP: ${group.label.toUpperCase()}`,
           colSpan: 3,
-          styles: { fontStyle: 'italic', textColor: [150, 150, 150] }
+          styles: { fillColor: [40, 70, 100], fontStyle: 'bold', textColor: 255 }
         }])
-      } else {
-        // Sort tugas berdasarkan periode dan urutan_tampil
-        const sortedTasks = [...cat.task_templates].sort((a, b) => {
-          const pA = PERIODE_ORDER[a.periode] || 99
-          const pB = PERIODE_ORDER[b.periode] || 99
-          if (pA !== pB) return pA - pB
-          return (a.urutan_tampil || 0) - (b.urutan_tampil || 0)
-        })
-
-        sortedTasks.forEach((t, index) => {
-          tableBody.push([
-            index + 1,
-            t.periode.charAt(0).toUpperCase() + t.periode.slice(1),
-            t.deskripsi_tugas
-          ])
-        })
       }
+
+      group.cats.forEach(cat => {
+        const isMain = group.isGroup && group.mainCat?.id === cat.id
+        // Row header kategori
+        tableBody.push([{
+          content: isMain ? `Tugas Pokok: ${cat.nama_bidang.toUpperCase()}` : `Bidang: ${cat.nama_bidang.toUpperCase()}`,
+          colSpan: 3,
+          styles: { fillColor: isMain ? [230, 245, 235] : [240, 244, 248], fontStyle: 'bold', textColor: isMain ? green : navy }
+        }])
+
+        if (cat.task_templates.length === 0) {
+          tableBody.push([{
+            content: 'Belum ada tugas di bidang ini.',
+            colSpan: 3,
+            styles: { fontStyle: 'italic', textColor: [150, 150, 150] }
+          }])
+        } else {
+          // Sort tugas berdasarkan periode dan urutan_tampil
+          const sortedTasks = [...cat.task_templates].sort((a, b) => {
+            const pA = PERIODE_ORDER[a.periode] || 99
+            const pB = PERIODE_ORDER[b.periode] || 99
+            if (pA !== pB) return pA - pB
+            return (a.urutan_tampil || 0) - (b.urutan_tampil || 0)
+          })
+
+          sortedTasks.forEach((t, index) => {
+            tableBody.push([
+              index + 1,
+              t.periode.charAt(0).toUpperCase() + t.periode.slice(1),
+              t.deskripsi_tugas
+            ])
+          })
+        }
+      })
     })
 
-    // @ts-ignore
-    doc.autoTable({
+    autoTable(doc, {
       startY: curY,
       head: [['No', 'Periode', 'Deskripsi Tugas']],
       body: tableBody,
