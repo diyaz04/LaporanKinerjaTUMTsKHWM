@@ -8,24 +8,18 @@ export type StaffCardData = {
   password: string
 }
 
-/**
- * Generate QR Code sebagai data URL (PNG base64)
- */
 async function generateQRDataURL(text: string): Promise<string> {
   return QRCode.toDataURL(text, {
     width: 200,
     margin: 1,
-    color: {
-      dark: '#1e3a5f',
-      light: '#ffffff',
-    },
+    color: { dark: '#1a3a5c', light: '#ffffff' },
     errorCorrectionLevel: 'M',
   })
 }
 
 /**
- * Generate PDF berisi kartu akses untuk satu atau lebih staff.
- * Layout: 2 kartu per halaman A4, ukuran kartu ~A6 (148 x 105mm)
+ * Generate PDF format surat resmi kop madrasah.
+ * 1 halaman A4 per orang.
  */
 export async function generateAccessCardPDF(
   staffList: StaffCardData[],
@@ -33,163 +27,347 @@ export async function generateAccessCardPDF(
 ) {
   const url = loginUrl || window.location.origin + '/login'
 
-  const doc = new jsPDF({
-    orientation: 'portrait',
-    unit: 'mm',
-    format: 'a4',
-  })
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
 
-  // A4: 210 x 297mm
-  // Kartu: 190 x 120mm dengan margin 10mm di tiap sisi, 2 per halaman
-  const cardW = 190
-  const cardH = 128
-  const marginX = 10
-  const gapY = 8
-  const cardPositions = [
-    { x: marginX, y: 10 },
-    { x: marginX, y: 10 + cardH + gapY },
-  ]
-
-  // Warna
-  const navy = [30, 58, 95] as [number, number, number]
-  const gold = [212, 175, 55] as [number, number, number]
-  const white = [255, 255, 255] as [number, number, number]
-  const lightGray = [245, 247, 250] as [number, number, number]
-  const darkText = [30, 30, 30] as [number, number, number]
+  // ── Palet warna ──
+  const navy     = [26,  58,  92]  as [number, number, number]
+  const green    = [21, 128,  61]  as [number, number, number]
+  const darkText = [20,  20,  20]  as [number, number, number]
   const grayText = [100, 110, 120] as [number, number, number]
+  const white    = [255, 255, 255] as [number, number, number]
+  const lightBg  = [248, 250, 252] as [number, number, number]
+  const borderGray = [220, 224, 228] as [number, number, number]
+
+  const pageW = 210
+  const pageH = 297
+  const mL = 20  // margin kiri
+  const mR = 20  // margin kanan
+  const contentW = pageW - mL - mR // 170mm
+
+  const tanggal = new Date().toLocaleDateString('id-ID', {
+    day: 'numeric', month: 'long', year: 'numeric'
+  })
 
   for (let i = 0; i < staffList.length; i++) {
     const staff = staffList[i]
-    const posIndex = i % 2
+    if (i > 0) doc.addPage()
 
-    // Tambah halaman baru (kecuali halaman pertama)
-    if (i > 0 && posIndex === 0) {
-      doc.addPage()
-    }
+    // ═══════════════════════════════════════════════════
+    // KOP SURAT
+    // ═══════════════════════════════════════════════════
 
-    const { x, y } = cardPositions[posIndex]
-
-    // ── Background kartu ──
-    doc.setFillColor(...lightGray)
-    doc.roundedRect(x, y, cardW, cardH, 4, 4, 'F')
-
-    // ── Header bar (navy) ──
+    // Garis atas kop (navy tebal)
     doc.setFillColor(...navy)
-    doc.roundedRect(x, y, cardW, 28, 4, 4, 'F')
-    // Fix sudut bawah kiri kanan header (override rounded jadi square)
-    doc.setFillColor(...navy)
-    doc.rect(x, y + 22, cardW, 6, 'F')
+    doc.rect(0, 0, pageW, 4, 'F')
 
-    // ── Garis aksen gold di bawah header ──
-    doc.setFillColor(...gold)
-    doc.rect(x, y + 27, cardW, 1.5, 'F')
+    // Garis tipis hijau di bawah navy
+    doc.setFillColor(...green)
+    doc.rect(0, 4, pageW, 1.5, 'F')
 
-    // ── Teks header ──
-    doc.setTextColor(...white)
+    // Nama madrasah — tengah
+    let kopY = 18
     doc.setFont('helvetica', 'bold')
-    doc.setFontSize(11)
-    doc.text('MTs Khairul Wathon Manggala', x + cardW / 2, y + 11, { align: 'center' })
-    doc.setFont('helvetica', 'normal')
-    doc.setFontSize(8)
-    doc.text('KARTU AKSES SISTEM MONITORING KINERJA KARYAWAN', x + cardW / 2, y + 19, { align: 'center' })
-
-    // ── Area konten ──
-    const contentY = y + 34
-    const qrSize = 52
-    const qrX = x + cardW - qrSize - 12
-    const qrY = contentY
-
-    // QR Code placeholder (akan diganti data URL)
-    // Buat QR Code
-    try {
-      const qrDataUrl = await generateQRDataURL(url)
-      // Background putih QR
-      doc.setFillColor(...white)
-      doc.roundedRect(qrX - 3, qrY - 3, qrSize + 6, qrSize + 6 + 10, 2, 2, 'F')
-      doc.addImage(qrDataUrl, 'PNG', qrX, qrY, qrSize, qrSize)
-      // Label di bawah QR
-      doc.setTextColor(...grayText)
-      doc.setFont('helvetica', 'normal')
-      doc.setFontSize(6.5)
-      doc.text('Scan untuk Login', qrX + qrSize / 2, qrY + qrSize + 5, { align: 'center' })
-    } catch {
-      // Fallback jika QR gagal
-      doc.setFillColor(...white)
-      doc.rect(qrX, qrY, qrSize, qrSize, 'F')
-      doc.setTextColor(...grayText)
-      doc.setFontSize(6)
-      doc.text('QR Error', qrX + qrSize / 2, qrY + qrSize / 2, { align: 'center' })
-    }
-
-    // ── Info staff ──
-    const infoX = x + 12
-    let infoY = contentY + 4
-
-    // Nama
+    doc.setFontSize(16)
     doc.setTextColor(...navy)
-    doc.setFont('helvetica', 'bold')
-    doc.setFontSize(14)
-    const namaLines = doc.splitTextToSize(staff.nama, qrX - infoX - 6)
-    doc.text(namaLines, infoX, infoY)
-    infoY += namaLines.length * 7 + 2
+    doc.text('MTs KHAIRUL WATHON MANGGALA', pageW / 2, kopY, { align: 'center' })
 
-    // Jabatan
-    doc.setFont('helvetica', 'italic')
-    doc.setFontSize(9)
-    doc.setTextColor(...grayText)
-    const jabatanText = staff.jabatan || 'Karyawan'
-    doc.text(jabatanText, infoX, infoY)
-    infoY += 10
-
-    // Separator
-    doc.setDrawColor(...gold)
-    doc.setLineWidth(0.8)
-    doc.line(infoX, infoY, qrX - 6, infoY)
-    infoY += 6
-
-    // Label + value rows
-    const drawField = (label: string, value: string, cy: number) => {
-      doc.setFont('helvetica', 'normal')
-      doc.setFontSize(7.5)
-      doc.setTextColor(...grayText)
-      doc.text(label, infoX, cy)
-
-      doc.setFont('helvetica', 'bold')
-      doc.setFontSize(9)
-      doc.setTextColor(...darkText)
-      const valLines = doc.splitTextToSize(value, qrX - infoX - 6)
-      doc.text(valLines, infoX, cy + 5)
-      return cy + 5 + valLines.length * 5 + 3
-    }
-
-    infoY = drawField('Email Login', staff.email, infoY)
-    infoY = drawField('Password', staff.password, infoY)
-
-    // ── Footer ──
-    const footerY = y + cardH - 8
-    doc.setFillColor(...navy)
-    doc.rect(x, footerY, cardW, 8, 'F')
+    kopY += 6
     doc.setFont('helvetica', 'normal')
-    doc.setFontSize(6.5)
-    doc.setTextColor(...white)
+    doc.setFontSize(8.5)
+    doc.setTextColor(...grayText)
     doc.text(
-      `Dicetak: ${new Date().toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' })}  •  ${url}`,
-      x + cardW / 2,
-      footerY + 5,
-      { align: 'center' }
+      'Jl. Pesantren No. 1, Manggala  •  Telp. (021) xxxxx  •  mtskhwm.sch.id',
+      pageW / 2, kopY, { align: 'center' }
     )
 
-    // ── Border kartu ──
+    // Garis pemisah kop — double line style
+    kopY += 5
+    doc.setDrawColor(...navy)
+    doc.setLineWidth(1.2)
+    doc.line(mL, kopY, pageW - mR, kopY)
+    doc.setLineWidth(0.3)
+    doc.setDrawColor(...green)
+    doc.line(mL, kopY + 1.8, pageW - mR, kopY + 1.8)
+
+    // ═══════════════════════════════════════════════════
+    // JUDUL SURAT
+    // ═══════════════════════════════════════════════════
+    let curY = kopY + 14
+
+    // Badge judul
+    const judulText = 'SURAT KETERANGAN AKSES SISTEM'
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(12)
+    const judulW = doc.getTextWidth(judulText)
+    const badgeX = (pageW - judulW - 16) / 2
+    const badgeY = curY - 5.5
+    doc.setFillColor(...navy)
+    doc.roundedRect(badgeX, badgeY, judulW + 16, 9, 2, 2, 'F')
+    doc.setTextColor(...white)
+    doc.text(judulText, pageW / 2, curY, { align: 'center' })
+
+    curY += 5
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(8.5)
+    doc.setTextColor(...grayText)
+    doc.text('Monitoring Kinerja Karyawan MTsU', pageW / 2, curY, { align: 'center' })
+
+    // ═══════════════════════════════════════════════════
+    // NOMOR & TANGGAL
+    // ═══════════════════════════════════════════════════
+    curY += 10
+    doc.setDrawColor(...borderGray)
+    doc.setLineWidth(0.3)
+    doc.line(mL, curY, pageW - mR, curY)
+    curY += 5
+
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(8.5)
+    doc.setTextColor(...grayText)
+    doc.text(`Tanggal : ${tanggal}`, mL, curY)
+    doc.text(`No. Dok : SKA/${new Date().getFullYear()}/${String(i + 1).padStart(3, '0')}`, pageW - mR, curY, { align: 'right' })
+
+    curY += 4
+    doc.setLineWidth(0.3)
+    doc.line(mL, curY, pageW - mR, curY)
+
+    // ═══════════════════════════════════════════════════
+    // PEMBUKA
+    // ═══════════════════════════════════════════════════
+    curY += 10
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(9.5)
+    doc.setTextColor(...darkText)
+    const pembukaText = 'Yang bertanda tangan di bawah ini, Kepala MTs Khairul Wathon Manggala, memberikan akses sistem monitoring kinerja karyawan kepada:'
+    const pembukaLines = doc.splitTextToSize(pembukaText, contentW)
+    doc.text(pembukaLines, mL, curY)
+    curY += pembukaLines.length * 5 + 4
+
+    // ═══════════════════════════════════════════════════
+    // BIODATA KARYAWAN (kotak info)
+    // ═══════════════════════════════════════════════════
+    const boxX = mL
+    const boxW = contentW * 0.58   // ~98mm — kotak biodata
+    const qrAreaW = contentW - boxW - 6  // sisa untuk QR
+    const boxStartY = curY
+
+    // Baris biodata
+    const fields = [
+      { label: 'Nama Lengkap', value: staff.nama },
+      { label: 'Jabatan', value: staff.jabatan || 'Karyawan' },
+    ]
+
+    let bioY = curY
+    for (const f of fields) {
+      // label
+      doc.setFont('helvetica', 'normal')
+      doc.setFontSize(8.5)
+      doc.setTextColor(...grayText)
+      doc.text(f.label, boxX, bioY)
+      // titik dua
+      doc.text(':', boxX + 36, bioY)
+      // value
+      doc.setFont('helvetica', 'bold')
+      doc.setFontSize(9.5)
+      doc.setTextColor(...darkText)
+      const valLines = doc.splitTextToSize(f.value, boxW - 42)
+      doc.text(valLines, boxX + 40, bioY)
+      bioY += valLines.length * 5.5 + 2
+    }
+
+    const boxEndY = bioY
+
+    // ═══════════════════════════════════════════════════
+    // KOTAK KREDENSIAL LOGIN (menonjol)
+    // ═══════════════════════════════════════════════════
+    curY = boxEndY + 8
+
+    // Header kotak kredensial
+    const credBoxH = 46
+    doc.setFillColor(...navy)
+    doc.roundedRect(boxX, curY, boxW + qrAreaW + 6, 8.5, 2, 2, 'F')
+    doc.setFillColor(...navy)
+    doc.rect(boxX, curY + 6, boxW + qrAreaW + 6, 2.5, 'F') // tutup rounded bawah
+    doc.setTextColor(...white)
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(8.5)
+    doc.text('🔐  INFORMASI LOGIN SISTEM', boxX + 6, curY + 5.8)
+
+    const credBodyY = curY + 8.5
+    // Body kotak
+    doc.setFillColor(...lightBg)
+    doc.rect(boxX, credBodyY, boxW + qrAreaW + 6, credBoxH - 8.5, 'F')
+    // Border full box
     doc.setDrawColor(...navy)
     doc.setLineWidth(0.5)
-    doc.roundedRect(x, y, cardW, cardH, 4, 4, 'S')
+    doc.roundedRect(boxX, curY, boxW + qrAreaW + 6, credBoxH, 2, 2, 'S')
+
+    // Email
+    let credY = credBodyY + 8
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(8)
+    doc.setTextColor(...grayText)
+    doc.text('Email / Username', boxX + 6, credY)
+
+    credY += 5
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(11)
+    doc.setTextColor(...navy)
+    doc.text(staff.email || '-', boxX + 6, credY)
+
+    // Garis pemisah
+    credY += 5
+    doc.setDrawColor(...borderGray)
+    doc.setLineWidth(0.2)
+    doc.line(boxX + 6, credY, boxX + boxW + qrAreaW, credY)
+
+    // Password
+    credY += 5
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(8)
+    doc.setTextColor(...grayText)
+    doc.text('Password', boxX + 6, credY)
+
+    credY += 5
+    // Password box (pill style)
+    const passBoxW = Math.min(doc.getTextWidth(staff.password) * 1.4 + 12, boxW + qrAreaW - 10)
+    doc.setFillColor(...navy)
+    doc.roundedRect(boxX + 6, credY - 4.5, passBoxW, 8, 2, 2, 'F')
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(11)
+    doc.setTextColor(...white)
+    doc.text(staff.password, boxX + 12, credY + 0.5)
+
+    curY = credBodyY + credBoxH - 8.5 + 10
+
+    // ═══════════════════════════════════════════════════
+    // QR CODE (kanan, sejajar dengan biodata & kredensial)
+    // ═══════════════════════════════════════════════════
+    const qrX = mL + boxW + 8
+    const qrSize = 45
+    const qrStartY = boxStartY - 4
+
+    try {
+      const qrDataUrl = await generateQRDataURL(url)
+      // Background putih dengan border
+      doc.setFillColor(...white)
+      doc.setDrawColor(...borderGray)
+      doc.setLineWidth(0.4)
+      doc.roundedRect(qrX - 3, qrStartY - 3, qrSize + 6, qrSize + 16, 2, 2, 'FD')
+
+      doc.addImage(qrDataUrl, 'PNG', qrX, qrStartY, qrSize, qrSize)
+
+      // Label di bawah QR
+      doc.setFont('helvetica', 'bold')
+      doc.setFontSize(7)
+      doc.setTextColor(...navy)
+      doc.text('SCAN UNTUK LOGIN', qrX + qrSize / 2, qrStartY + qrSize + 5, { align: 'center' })
+      doc.setFont('helvetica', 'normal')
+      doc.setFontSize(6)
+      doc.setTextColor(...grayText)
+      const shortUrl = url.replace(/^https?:\/\//, '')
+      doc.text(shortUrl, qrX + qrSize / 2, qrStartY + qrSize + 9.5, { align: 'center' })
+    } catch {
+      doc.setFillColor(...lightBg)
+      doc.roundedRect(qrX - 3, qrStartY - 3, qrSize + 6, qrSize + 16, 2, 2, 'F')
+      doc.setFont('helvetica', 'normal')
+      doc.setFontSize(7)
+      doc.setTextColor(...grayText)
+      doc.text('QR Code', qrX + qrSize / 2, qrStartY + qrSize / 2, { align: 'center' })
+    }
+
+    // ═══════════════════════════════════════════════════
+    // CATATAN KEAMANAN
+    // ═══════════════════════════════════════════════════
+    curY += 4
+    doc.setFillColor(254, 249, 195) // kuning muda
+    doc.setDrawColor(234, 179, 8)
+    doc.setLineWidth(0.3)
+    doc.roundedRect(mL, curY, contentW, 16, 2, 2, 'FD')
+
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(8)
+    doc.setTextColor(113, 63, 18) // cokelat tua
+    doc.text('⚠  HARAP DIPERHATIKAN', mL + 5, curY + 5.5)
+
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(7.5)
+    doc.setTextColor(133, 77, 14)
+    const noteText = 'Jaga kerahasiaan akun ini. Jangan berikan email dan password kepada pihak lain. Ganti password segera setelah login pertama kali melalui menu Profil.'
+    const noteLines = doc.splitTextToSize(noteText, contentW - 10)
+    doc.text(noteLines, mL + 5, curY + 10.5)
+
+    curY += 22
+
+    // ═══════════════════════════════════════════════════
+    // AREA TANDA TANGAN
+    // ═══════════════════════════════════════════════════
+    curY += 6
+
+    // Kolom kiri: Penerima
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(8.5)
+    doc.setTextColor(...grayText)
+    doc.text('Penerima Akses,', mL, curY)
+
+    // Kolom kanan: Kepala Madrasah
+    doc.text(`Manggala, ${tanggal}`, pageW - mR, curY, { align: 'right' })
+    doc.text('Kepala MTs Khairul Wathon Manggala,', pageW - mR, curY + 5, { align: 'right' })
+
+    // Garis TTD kiri
+    const ttdY = curY + 28
+    doc.setDrawColor(...borderGray)
+    doc.setLineWidth(0.4)
+    doc.line(mL, ttdY, mL + 60, ttdY)
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(9)
+    doc.setTextColor(...darkText)
+    doc.text(staff.nama, mL, ttdY + 5)
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(8)
+    doc.setTextColor(...grayText)
+    doc.text(staff.jabatan || 'Karyawan', mL, ttdY + 10)
+
+    // Garis TTD kanan
+    doc.setDrawColor(...borderGray)
+    doc.setLineWidth(0.4)
+    doc.line(pageW - mR - 70, ttdY, pageW - mR, ttdY)
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(9)
+    doc.setTextColor(...darkText)
+    doc.text('_________________________', pageW - mR - 70, ttdY + 5)
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(8)
+    doc.setTextColor(...grayText)
+    doc.text('NIP. ................................', pageW - mR - 70, ttdY + 10)
+
+    // ═══════════════════════════════════════════════════
+    // FOOTER HALAMAN
+    // ═══════════════════════════════════════════════════
+    // Garis footer
+    doc.setDrawColor(...borderGray)
+    doc.setLineWidth(0.3)
+    doc.line(mL, pageH - 14, pageW - mR, pageH - 14)
+
+    // Garis tebal bawah
+    doc.setFillColor(...navy)
+    doc.rect(0, pageH - 4, pageW, 4, 'F')
+    doc.setFillColor(...green)
+    doc.rect(0, pageH - 5.5, pageW, 1.5, 'F')
+
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(7)
+    doc.setTextColor(...grayText)
+    doc.text(
+      `Dokumen ini dicetak secara otomatis oleh Sistem Monitoring Kinerja Karyawan MTsU  •  ${url}`,
+      pageW / 2, pageH - 8, { align: 'center' }
+    )
   }
 
-  // Download
   const filename =
     staffList.length === 1
-      ? `kartu_akses_${staffList[0].nama.replace(/\s+/g, '_').toLowerCase()}.pdf`
-      : `kartu_akses_semua_staff_${staffList.length}orang.pdf`
+      ? `surat_akses_${staffList[0].nama.replace(/\s+/g, '_').toLowerCase()}.pdf`
+      : `surat_akses_karyawan_${staffList.length}orang.pdf`
 
   doc.save(filename)
 }
