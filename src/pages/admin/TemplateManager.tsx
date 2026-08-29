@@ -765,11 +765,23 @@ export default function TemplateManager() {
                   return (
                     <div key={cat.id} className={`bg-white rounded-lg shadow-sm border overflow-hidden p-4 ${isMain ? 'ring-2 ring-emerald-500/20' : ''}`}>
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-                        <div>
-                          <h3 className={`font-semibold ${isMain ? 'text-lg text-emerald-800' : 'text-md text-slate-800'}`}>
-                            {isMain ? `Tugas Pokok: ${cat.nama_bidang}` : cat.nama_bidang}
-                          </h3>
-                          <p className="text-sm text-gray-500">{catTemplates.length} tugas total</p>
+                        <div className="flex items-center gap-3">
+                          <div>
+                            <h3 className={`font-semibold ${isMain ? 'text-lg text-emerald-800' : 'text-md text-slate-800'}`}>
+                              {isMain ? `Tugas Pokok: ${cat.nama_bidang}` : cat.nama_bidang}
+                            </h3>
+                            <p className="text-sm text-gray-500">{catTemplates.length} tugas total</p>
+                          </div>
+                          <div className="flex flex-col gap-1">
+                            <Button variant="ghost" size="sm" onClick={() => openCatDialog(cat)} className="h-6 px-2 text-blue-600">
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </Button>
+                            {!isMain && (
+                              <Button variant="ghost" size="sm" onClick={() => deleteCategory(cat.id)} className="h-6 px-2 text-red-600">
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </Button>
+                            )}
+                          </div>
                         </div>
                         <div className="flex items-center gap-2 flex-wrap">
                           <div className="text-sm text-gray-600 mr-2">Petugas:</div>
