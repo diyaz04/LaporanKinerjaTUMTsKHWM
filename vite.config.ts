@@ -11,9 +11,9 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg', 'favicon.ico', 'apple-touch-icon.png'],
       manifest: {
-        name: 'Kontrol Tugas TU — MTs KH A Wahab Muhsin',
-        short_name: 'Kontrol TU',
-        description: 'Sistem Kontroling Kinerja Staff TU',
+        name: 'Laporan Kinerja Struktural MTs KH A Wahab Muhsin',
+        short_name: 'Kinerja MTs',
+        description: 'Sistem Laporan Kinerja Struktural',
         theme_color: '#ffffff',
         background_color: '#ffffff',
         display: 'standalone',

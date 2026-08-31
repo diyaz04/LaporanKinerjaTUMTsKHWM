@@ -18,6 +18,7 @@ import VerificationManager from './pages/admin/VerificationManager'
 import VerificationDetail from './pages/admin/VerificationDetail'
 import ReportGenerator from './pages/admin/ReportGenerator'
 import SummaryRekap from './pages/admin/SummaryRekap'
+import RekapPengisian from './pages/admin/RekapPengisian'
 
 export default function App() {
   return (
@@ -47,6 +48,7 @@ export default function App() {
               <Route path="verify/:id" element={<VerificationDetail />} />
               <Route path="reports" element={<ReportGenerator />} />
               <Route path="summary" element={<SummaryRekap />} />
+              <Route path="status" element={<RekapPengisian />} />
             </Route>
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />

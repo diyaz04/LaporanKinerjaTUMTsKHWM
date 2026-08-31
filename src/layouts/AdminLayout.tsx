@@ -25,8 +25,16 @@ export default function AdminLayout() {
     { name: 'Template Tugas', path: '/admin/templates', icon: FileText },
     { name: 'Verifikasi', path: '/admin/verify', icon: CheckSquare },
     { name: 'Laporan', path: '/admin/reports', icon: BarChart },
-    { name: 'Rekap', path: '/admin/summary', icon: PieChart },
+    { name: 'Rekap Hasil', path: '/admin/summary', icon: PieChart },
+    { name: 'Status Pengisian', path: '/admin/status', icon: CheckSquare },
   ]
+
+  const currentDate = new Date().toLocaleDateString('id-ID', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric'
+  })
 
   return (
     <div className="min-h-screen bg-slate-50 flex">
@@ -45,9 +53,12 @@ export default function AdminLayout() {
         }`}
       >
         <div className="p-4 border-b flex justify-between items-center bg-white">
-          <div className="flex items-center space-x-2">
-            <img src="/logo.png" alt="Logo" className="w-8 h-8 object-contain" />
-            <h1 className="text-xl font-bold bg-gradient-to-r from-green-500 to-emerald-600 bg-clip-text text-transparent">Admin MTsU</h1>
+          <div className="flex items-center space-x-3">
+            <img src="/logo.png" alt="Logo" className="w-10 h-10 object-contain" />
+            <div>
+              <h1 className="text-xl font-bold bg-gradient-to-r from-green-500 to-emerald-600 bg-clip-text text-transparent leading-tight">Admin MTsU</h1>
+              <p className="text-[10px] text-gray-500 font-medium">{currentDate}</p>
+            </div>
           </div>
           <Button variant="ghost" size="icon" className="md:hidden" onClick={() => setIsSidebarOpen(false)}>
             <X className="h-5 w-5" />
@@ -93,13 +104,18 @@ export default function AdminLayout() {
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
         {/* Top Header for Mobile */}
-        <header className="bg-white border-b px-4 py-3 flex items-center md:hidden sticky top-0 z-10">
-          <Button variant="ghost" size="icon" onClick={() => setIsSidebarOpen(true)} className="mr-2">
-            <Menu className="h-6 w-6" />
-          </Button>
-          <div className="flex items-center space-x-2">
-            <img src="/logo.png" alt="Logo" className="w-6 h-6 object-contain" />
-            <h1 className="text-lg font-bold">Admin MTsU</h1>
+        <header className="bg-white border-b px-4 py-3 flex items-center justify-between md:hidden sticky top-0 z-10 shadow-sm">
+          <div className="flex items-center">
+            <Button variant="ghost" size="icon" onClick={() => setIsSidebarOpen(true)} className="mr-2">
+              <Menu className="h-6 w-6" />
+            </Button>
+            <div className="flex items-center space-x-2">
+              <img src="/logo.png" alt="Logo" className="w-8 h-8 object-contain" />
+              <div>
+                <h1 className="text-lg font-bold leading-none">Admin MTsU</h1>
+                <p className="text-[10px] text-gray-500 mt-1">{currentDate}</p>
+              </div>
+            </div>
           </div>
         </header>
 

@@ -14,13 +14,23 @@ export default function StaffLayout() {
     { name: 'Profil', path: '/staff/profile', icon: User },
   ]
 
+  const currentDate = new Date().toLocaleDateString('id-ID', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric'
+  })
+
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col pb-16">
       {/* Header */}
       <header className="bg-white border-b px-4 py-3 flex justify-between items-center sticky top-0 z-10 shadow-sm">
         <div className="flex items-center space-x-2">
           <img src="/logo.png" alt="Logo" className="w-8 h-8 object-contain" />
-          <h1 className="text-lg font-bold bg-gradient-to-r from-green-500 to-emerald-600 bg-clip-text text-transparent">Portal Karyawan</h1>
+          <div>
+            <h1 className="text-lg font-bold bg-gradient-to-r from-green-500 to-emerald-600 bg-clip-text text-transparent leading-none">Portal Karyawan</h1>
+            <p className="text-xs text-gray-500 font-medium mt-1">{currentDate}</p>
+          </div>
         </div>
         <Button variant="ghost" size="icon" onClick={signOut} title="Logout">
           <LogOut className="h-5 w-5 text-gray-600" />

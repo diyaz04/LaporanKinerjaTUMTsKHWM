@@ -64,13 +64,27 @@ export default function StaffDashboard() {
         .from('report_batches')
         .select('*')
         .eq('user_id', session.user.id)
-        .order('created_at', { ascending: false })
       if (refreshedBatches) currentBatches = refreshedBatches as ReportBatch[]
     }
 
-    // Filter to only show active/unapproved ones on dashboard (or just latest ones)
-    // Actually, for dashboard, let's show all that are not approved, or recently created
-    const activeBatches = currentBatches.filter(b => b.status !== 'approved')
+    // Filter to ONLY show active current period batches, OR anything that needs revision
+    const activeBatches = currentBatches.filter(b => {
+      // Selalu munculkan jika butuh revisi (agar tidak terlewat oleh staf)
+      if (b.status === 'revisi') return true
+
+      // Harian: hanya hari ini
+      if (b.periode === 'harian') return b.periode_key === todayKey
+
+      // Mingguan: hanya minggu ini
+      if (b.periode === 'mingguan') return b.periode_key === weekKey
+      
+      // Bulanan: hanya bulan ini
+      if (b.periode === 'bulanan') return b.periode_key === new Date().toISOString().substring(0, 7)
+
+      // Insidentil, periodik, dsb: munculkan jika belum disetujui (biar bisa diisi/dipantau)
+      return b.status !== 'approved'
+    })
+
     setBatches(activeBatches)
     setLoading(false)
   }
@@ -114,32 +128,42 @@ export default function StaffDashboard() {
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {batches.map(batch => (
-          <Card key={batch.id} className="hover:shadow-md transition-shadow">
-            <CardHeader className="pb-3">
-              <div className="flex justify-between items-start">
-                <div>
-                  <CardTitle className="text-lg capitalize flex items-center gap-2">
-                    {batch.periode === 'harian' && <Clock className="w-5 h-5 text-blue-500" />}
-                    {batch.periode === 'mingguan' && <Calendar className="w-5 h-5 text-purple-500" />}
-                    {['bulanan', 'periodik', 'berkala'].includes(batch.periode) && <Calendar className="w-5 h-5 text-orange-500" />}
-                    {batch.periode === 'insidentil' && <Clock className="w-5 h-5 text-red-500" />}
-                    {batch.periode}
-                  </CardTitle>
-                  <CardDescription className="mt-1 font-mono text-xs">{batch.periode_key}</CardDescription>
+        {batches.map(batch => {
+          const isSubmitted = batch.status === 'pending_verifikasi' || batch.status === 'approved'
+
+          return (
+            <Card key={batch.id} className="hover:shadow-md transition-shadow">
+              <CardHeader className="pb-3">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <CardTitle className="text-lg capitalize flex items-center gap-2">
+                      {batch.periode === 'harian' && <Clock className="w-5 h-5 text-blue-500" />}
+                      {batch.periode === 'mingguan' && <Calendar className="w-5 h-5 text-purple-500" />}
+                      {['bulanan', 'periodik', 'berkala'].includes(batch.periode) && <Calendar className="w-5 h-5 text-orange-500" />}
+                      {batch.periode === 'insidentil' && <Clock className="w-5 h-5 text-red-500" />}
+                      {batch.periode}
+                    </CardTitle>
+                    <CardDescription className="mt-1 font-mono text-xs">{batch.periode_key}</CardDescription>
+                  </div>
+                  {getStatusBadge(batch.status)}
                 </div>
-                {getStatusBadge(batch.status)}
-              </div>
-            </CardHeader>
-            <CardContent>
-              <Link to={`/staff/isi/${batch.id}`}>
-                <Button className="w-full mt-2" variant={batch.status === 'revisi' ? 'destructive' : 'default'}>
-                  {batch.status === 'draft' || batch.status === 'revisi' ? 'Isi Laporan' : 'Lihat Detail'}
-                </Button>
-              </Link>
-            </CardContent>
-          </Card>
-        ))}
+              </CardHeader>
+              <CardContent>
+                {isSubmitted ? (
+                  <Button className="w-full mt-2 bg-gray-300 text-gray-600 cursor-not-allowed hover:bg-gray-300" disabled>
+                    Sudah Mengisi
+                  </Button>
+                ) : (
+                  <Link to={`/staff/isi/${batch.id}`}>
+                    <Button className="w-full mt-2" variant={batch.status === 'revisi' ? 'destructive' : 'default'}>
+                      {batch.status === 'revisi' ? 'Perbaiki Laporan' : 'Isi Laporan'}
+                    </Button>
+                  </Link>
+                )}
+              </CardContent>
+            </Card>
+          )
+        })}
 
         {/* Action Card for Insidentil */}
         <Card className="border-dashed border-2 bg-slate-50 flex flex-col justify-center items-center py-8 text-center hover:bg-slate-100 transition-colors">
