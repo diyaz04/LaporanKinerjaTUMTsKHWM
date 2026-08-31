@@ -1,9 +1,18 @@
 import { useState, useEffect } from 'react'
+import { Link } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
-import { Card, CardHeader, CardTitle, CardContent } from '../../components/ui/card'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '../../components/ui/table'
 import { Badge } from '../../components/ui/badge'
-import { Calendar, Clock, AlertTriangle, CheckCircle } from 'lucide-react'
+import { Button } from '../../components/ui/button'
+import { Calendar, Clock, AlertTriangle, CheckCircle, Eye } from 'lucide-react'
 import type { ReportBatch } from '../../types/database'
 
 export default function StaffHistory() {
@@ -38,13 +47,13 @@ export default function StaffHistory() {
     }
   }
 
-  if (loading) return <div>Memuat riwayat...</div>
+  if (loading) return <div className="p-4">Memuat riwayat...</div>
 
   return (
     <div className="space-y-6">
       <div className="flex flex-col space-y-2">
         <h2 className="text-2xl font-bold">Riwayat Laporan</h2>
-        <p className="text-gray-500">Laporan tugas yang sudah disubmit atau disetujui.</p>
+        <p className="text-gray-500">Daftar (List) laporan tugas yang sudah Anda kirimkan.</p>
       </div>
 
       {batches.length === 0 ? (
@@ -52,29 +61,42 @@ export default function StaffHistory() {
           <p className="text-gray-500">Belum ada riwayat laporan yang disubmit.</p>
         </div>
       ) : (
-        <div className="grid gap-4 md:grid-cols-2">
-          {batches.map(batch => (
-            <Card key={batch.id} className="hover:shadow-md transition-shadow">
-              <CardHeader className="pb-3 flex flex-row items-start justify-between">
-                <div>
-                  <CardTitle className="text-lg capitalize flex items-center gap-2">
-                    {batch.periode === 'harian' ? <Clock className="w-5 h-5 text-gray-400" /> : <Calendar className="w-5 h-5 text-gray-400" />}
+        <div className="rounded-md border bg-white overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-slate-50">
+                <TableHead>Periode</TableHead>
+                <TableHead>Waktu</TableHead>
+                <TableHead>Tgl Dikirim</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="text-right">Aksi</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {batches.map(batch => (
+                <TableRow key={batch.id} className="hover:bg-slate-50">
+                  <TableCell className="font-medium capitalize whitespace-nowrap flex items-center gap-2">
+                    {batch.periode === 'harian' ? <Clock className="w-4 h-4 text-gray-400" /> : <Calendar className="w-4 h-4 text-gray-400" />}
                     {batch.periode}
-                  </CardTitle>
-                  <p className="mt-1 font-mono text-sm text-gray-500">{batch.periode_key}</p>
-                </div>
-                {getStatusBadge(batch.status)}
-              </CardHeader>
-              <CardContent>
-                <div className="text-sm text-gray-600">
-                  <p>Disubmit: {batch.submitted_at ? new Date(batch.submitted_at).toLocaleDateString('id-ID') : '-'}</p>
-                  {batch.status === 'approved' && (
-                    <p>Disetujui: {batch.verified_at ? new Date(batch.verified_at).toLocaleDateString('id-ID') : '-'}</p>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+                  </TableCell>
+                  <TableCell className="font-mono text-xs whitespace-nowrap">{batch.periode_key}</TableCell>
+                  <TableCell className="whitespace-nowrap">
+                    {batch.submitted_at ? new Date(batch.submitted_at).toLocaleDateString('id-ID') : '-'}
+                  </TableCell>
+                  <TableCell className="whitespace-nowrap">
+                    {getStatusBadge(batch.status)}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <Link to={`/staff/isi/${batch.id}`}>
+                      <Button variant="outline" size="sm" className="h-8">
+                        <Eye className="w-4 h-4 mr-1.5" /> Detail
+                      </Button>
+                    </Link>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
         </div>
       )}
     </div>
