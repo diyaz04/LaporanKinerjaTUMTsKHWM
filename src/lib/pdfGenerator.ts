@@ -8,6 +8,11 @@ export type PrintData = {
   submissions: (TaskSubmission & {
     task_templates: TaskTemplate & { task_categories: TaskCategory }
   })[]
+  statistics?: {
+    harian: number
+    mingguan: number
+    bulanan: number
+  }
 }
 
 export function generatePDF(data: PrintData, mode: 'replika' | 'simpel') {
@@ -40,6 +45,14 @@ function generateReplika(doc: jsPDF, data: PrintData) {
   doc.text(`Jabatan    : ${data.profile.jabatan || '-'}`, 14, 46)
   doc.text(`Periode    : ${data.batch.periode_key}`, 14, 52)
   
+  let startY = 58
+  if (data.statistics) {
+    doc.setFont("helvetica", "bold")
+    doc.text(`Statistik Keaktifan Laporan (Tugas Selesai):`, 120, 40)
+    doc.setFont("helvetica", "normal")
+    doc.text(`Harian: ${data.statistics.harian}%   Mingguan: ${data.statistics.mingguan}%   Bulanan: ${data.statistics.bulanan}%`, 120, 46)
+  }
+
   // Table Data
   const tableData: any[][] = []
   
@@ -60,18 +73,22 @@ function generateReplika(doc: jsPDF, data: PrintData) {
     ])
     
     subs.forEach(sub => {
+      let combinedNotes = sub.catatan || ''
+      if (sub.admin_note) {
+        combinedNotes += `\n\n[Catatan Admin]: ${sub.admin_note}`
+      }
       tableData.push([
         counter++,
         catName, // We can keep or hide it, since we grouped it. Let's put it as text if needed
         sub.task_templates.deskripsi_tugas,
         sub.status || '',
-        sub.catatan || ''
+        combinedNotes.trim()
       ])
     })
   })
 
   autoTable(doc, {
-    startY: 58,
+    startY: startY,
     head: [['No', 'Bidang/Urusan', 'Rincian Tugas & Item Output', 'Status', 'Keterangan']],
     body: tableData,
     theme: 'grid',
@@ -128,16 +145,30 @@ function generateSimpel(doc: jsPDF, data: PrintData) {
   doc.text(`Periode: ${data.batch.periode} (${data.batch.periode_key})`, 14, 28)
   doc.text(`Jabatan: ${data.profile.jabatan || '-'}`, 14, 34)
   
-  const tableData = data.submissions.map((sub, i) => [
-    i + 1,
-    sub.task_templates.task_categories.nama_bidang,
-    sub.task_templates.deskripsi_tugas,
-    sub.status || '-',
-    sub.catatan || '-'
-  ])
+  let startY = 42
+  if (data.statistics) {
+    doc.setFont("helvetica", "bold")
+    doc.text(`Statistik Keaktifan Laporan (Tugas Selesai):`, 120, 28)
+    doc.setFont("helvetica", "normal")
+    doc.text(`Harian: ${data.statistics.harian}%   Mingguan: ${data.statistics.mingguan}%   Bulanan: ${data.statistics.bulanan}%`, 120, 34)
+  }
+
+  const tableData = data.submissions.map((sub, i) => {
+    let combinedNotes = sub.catatan || ''
+    if (sub.admin_note) {
+      combinedNotes += `\n\n[Catatan Admin]: ${sub.admin_note}`
+    }
+    return [
+      i + 1,
+      sub.task_templates.task_categories.nama_bidang,
+      sub.task_templates.deskripsi_tugas,
+      sub.status || '-',
+      combinedNotes.trim()
+    ]
+  })
 
   autoTable(doc, {
-    startY: 42,
+    startY: startY,
     head: [['No', 'Bidang', 'Tugas', 'Status', 'Catatan']],
     body: tableData,
     theme: 'striped',

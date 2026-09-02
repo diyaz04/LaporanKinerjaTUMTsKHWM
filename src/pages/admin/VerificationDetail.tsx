@@ -22,6 +22,7 @@ export default function VerificationDetail() {
   const [batch, setBatch] = useState<BatchDetail | null>(null)
   const [submissions, setSubmissions] = useState<SubmissionDetail[]>([])
   const [catatanVerifikasi, setCatatanVerifikasi] = useState('')
+  const [adminNotes, setAdminNotes] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
 
@@ -45,7 +46,14 @@ export default function VerificationDetail() {
       .eq('report_batch_id', id)
       .order('template_id') // we ideally order by urutan_tampil but nested ordering is tricky
 
-    if (sData) setSubmissions(sData as SubmissionDetail[])
+    if (sData) {
+      setSubmissions(sData as SubmissionDetail[])
+      const initialNotes: Record<string, string> = {}
+      sData.forEach((s: any) => {
+        if (s.admin_note) initialNotes[s.id] = s.admin_note
+      })
+      setAdminNotes(initialNotes)
+    }
     
     setLoading(false)
   }
@@ -68,6 +76,14 @@ export default function VerificationDetail() {
       
       const { error } = await supabase.from('report_batches').update(payload).eq('id', id)
       if (error) throw error
+
+      // Update admin notes for each submission
+      for (const sub of submissions) {
+        const note = adminNotes[sub.id] || null
+        if (note !== sub.admin_note) {
+          await supabase.from('task_submissions').update({ admin_note: note }).eq('id', sub.id)
+        }
+      }
       
       navigate('/admin/verify')
     } catch (err) {
@@ -118,9 +134,22 @@ export default function VerificationDetail() {
                         {sub.status || 'Kosong'}
                       </span>
                     </div>
-                    <div className="flex-1">
-                      <Label className="text-xs text-gray-500 block mb-1">Catatan / Bukti</Label>
+                    <div className="flex-1 border-r pr-4">
+                      <Label className="text-xs text-gray-500 block mb-1">Catatan / Bukti (Karyawan)</Label>
                       <p className="text-sm text-gray-800 whitespace-pre-wrap">{sub.catatan || '-'}</p>
+                    </div>
+                    <div className="flex-1 pl-2">
+                      <Label className="text-xs text-emerald-700 block mb-1">Catatan Admin (Opsional)</Label>
+                      {batch.status === 'pending_verifikasi' ? (
+                        <Textarea 
+                          className="text-sm min-h-[60px]" 
+                          placeholder="Tambahkan catatan khusus untuk tugas ini..."
+                          value={adminNotes[sub.id] || ''}
+                          onChange={(e) => setAdminNotes({ ...adminNotes, [sub.id]: e.target.value })}
+                        />
+                      ) : (
+                        <p className="text-sm text-gray-800 whitespace-pre-wrap">{sub.admin_note || '-'}</p>
+                      )}
                     </div>
                   </div>
                 </div>

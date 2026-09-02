@@ -60,6 +60,7 @@ export type TaskSubmission = {
   template_id: string | null
   status: 'Ya' | 'Tdk' | null
   catatan: string | null
+  admin_note: string | null
   updated_at: string
 }
 

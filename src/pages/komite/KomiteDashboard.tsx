@@ -73,6 +73,11 @@ export default function KomiteDashboard() {
         .in('report_batch_id', batchIds)
         
       if (submissionsData) {
+        const calcPct = (subs: any[]) => {
+          if (subs.length === 0) return 0
+          const yaCount = subs.filter(s => s.status === 'Ya').length
+          return Math.round((yaCount / subs.length) * 100)
+        }
         // Combine submissions and add date context
         const combinedSubmissions = submissionsData.map(sub => {
           const parentBatch = monthBatches.find(b => b.id === sub.report_batch_id)
@@ -112,7 +117,12 @@ export default function KomiteDashboard() {
         const printData: PrintData = {
           batch: dummyBatch,
           profile: profileData as Profile,
-          submissions: combinedSubmissions
+          submissions: combinedSubmissions,
+          statistics: {
+            harian: calcPct(combinedSubmissions.filter(s => s.task_templates?.periode === 'harian')),
+            mingguan: calcPct(combinedSubmissions.filter(s => s.task_templates?.periode === 'mingguan')),
+            bulanan: calcPct(combinedSubmissions.filter(s => s.task_templates?.periode === 'bulanan'))
+          }
         }
         
         setPreviewData(printData)
@@ -216,6 +226,18 @@ export default function KomiteDashboard() {
                   Cetak PDF
                 </Button>
               </CardHeader>
+              
+              {previewData.statistics && (
+                <div className="bg-white px-6 py-4 border-b flex gap-6 text-sm">
+                  <div className="font-semibold text-gray-700">Keaktifan Laporan (Selesai):</div>
+                  <div className="flex gap-4">
+                    <span className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full font-medium">Harian: {previewData.statistics.harian}%</span>
+                    <span className="bg-purple-100 text-purple-800 px-3 py-1 rounded-full font-medium">Mingguan: {previewData.statistics.mingguan}%</span>
+                    <span className="bg-orange-100 text-orange-800 px-3 py-1 rounded-full font-medium">Bulanan: {previewData.statistics.bulanan}%</span>
+                  </div>
+                </div>
+              )}
+
               <CardContent className="p-0">
                 <div className="max-h-[600px] overflow-auto">
                   <Table>
@@ -248,7 +270,14 @@ export default function KomiteDashboard() {
                                 {sub.status || '-'}
                               </span>
                             </TableCell>
-                            <TableCell className="text-sm whitespace-pre-wrap">{sub.catatan || '-'}</TableCell>
+                            <TableCell className="text-sm whitespace-pre-wrap">
+                              <div>{sub.catatan || '-'}</div>
+                              {sub.admin_note && (
+                                <div className="mt-2 text-xs text-amber-700 bg-amber-50 p-2 rounded">
+                                  <strong>Catatan Admin:</strong> {sub.admin_note}
+                                </div>
+                              )}
+                            </TableCell>
                           </TableRow>
                         ))
                       )}

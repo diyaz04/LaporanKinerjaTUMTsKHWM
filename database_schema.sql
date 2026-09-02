@@ -66,10 +66,19 @@ create or replace function public.is_admin() returns boolean as $$
   );
 $$ language sql security definer;
 
+-- Helper function to check if user is komite
+create or replace function public.is_komite() returns boolean as $$
+  select exists (
+    select 1 from profiles
+    where id = auth.uid() and role = 'komite'
+  );
+$$ language sql security definer;
+
 alter table profiles enable row level security;
 create policy "staff select self profiles" on profiles for select using (auth.uid() = id);
 create policy "staff update self profiles" on profiles for update using (auth.uid() = id);
 create policy "admin all profiles" on profiles for all using (public.is_admin());
+create policy "komite select all profiles" on profiles for select using (public.is_komite());
 
 alter table task_categories enable row level security;
 create policy "select all task_categories" on task_categories for select using (auth.role() = 'authenticated');
@@ -88,6 +97,7 @@ create policy "staff select self report_batches" on report_batches for select us
 create policy "staff insert self report_batches" on report_batches for insert with check (auth.uid() = user_id);
 create policy "staff update self report_batches" on report_batches for update using (auth.uid() = user_id);
 create policy "admin all report_batches" on report_batches for all using (public.is_admin());
+create policy "komite select report_batches" on report_batches for select using (public.is_komite());
 
 alter table task_submissions enable row level security;
 create policy "staff select self task_submissions" on task_submissions for select using (
@@ -100,6 +110,7 @@ create policy "staff update self task_submissions" on task_submissions for updat
   exists (select 1 from report_batches where id = report_batch_id and user_id = auth.uid())
 );
 create policy "admin all task_submissions" on task_submissions for all using (public.is_admin());
+create policy "komite select task_submissions" on task_submissions for select using (public.is_komite());
 
 
 -- SEED DATA

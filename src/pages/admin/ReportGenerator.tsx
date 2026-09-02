@@ -121,10 +121,21 @@ export default function ReportGenerator() {
             tugas_lainnya: allTugasLainnya || null
           }
 
+          const calcPct = (subs: any[]) => {
+            if (subs.length === 0) return 0
+            const yaCount = subs.filter(s => s.status === 'Ya').length
+            return Math.round((yaCount / subs.length) * 100)
+          }
+
           const printData: PrintData = {
             batch: dummyBatch,
             profile: profileData as Profile,
-            submissions: combinedSubmissions
+            submissions: combinedSubmissions,
+            statistics: {
+              harian: calcPct(combinedSubmissions.filter(s => s.task_templates?.periode === 'harian')),
+              mingguan: calcPct(combinedSubmissions.filter(s => s.task_templates?.periode === 'mingguan')),
+              bulanan: calcPct(combinedSubmissions.filter(s => s.task_templates?.periode === 'bulanan'))
+            }
           }
           generatePDF(printData, exportMode)
         }
