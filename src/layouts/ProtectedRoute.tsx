@@ -3,7 +3,7 @@ import { Navigate, Outlet } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 
 type ProtectedRouteProps = {
-  allowedRoles?: ('admin' | 'staff')[]
+  allowedRoles?: ('admin' | 'staff' | 'komite')[]
 }
 
 export default function ProtectedRoute({ allowedRoles }: ProtectedRouteProps) {
@@ -19,7 +19,7 @@ export default function ProtectedRoute({ allowedRoles }: ProtectedRouteProps) {
 
   if (allowedRoles && !allowedRoles.includes(profile.role)) {
     // Redirect to their default dashboard if they try to access unauthorized role routes
-    return <Navigate to={profile.role === 'admin' ? '/admin' : '/staff'} replace />
+    return <Navigate to={profile.role === 'admin' ? '/admin' : profile.role === 'komite' ? '/komite' : '/staff'} replace />
   }
 
   return <Outlet />

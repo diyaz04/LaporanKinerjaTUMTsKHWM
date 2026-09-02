@@ -65,7 +65,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       nama,
       jabatan: jabatan || null,
       tipe_karyawan: tipe_karyawan || null,
-      role: 'staff',
+      role: req.body.role === 'komite' ? 'komite' : 'staff',
     })
 
     if (insertError) {

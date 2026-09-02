@@ -24,6 +24,7 @@ export default function ChecklistForm() {
   
   // Local state for answers: { template_id: { status: 'Ya'|'Tdk', catatan: '' } }
   const [answers, setAnswers] = useState<Record<string, { status: string; catatan: string; id?: string }>>({})
+  const [tugasLainnya, setTugasLainnya] = useState('')
   
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -50,6 +51,7 @@ export default function ChecklistForm() {
       return
     }
     setBatch(batchData as ReportBatch)
+    setTugasLainnya((batchData as ReportBatch).tugas_lainnya || '')
 
     // 2. Fetch staff assignments
     const { data: assignments } = await supabase
@@ -135,15 +137,20 @@ export default function ChecklistForm() {
         if (err2) throw err2
       }
 
+      const batchUpdatePayload: any = { tugas_lainnya: tugasLainnya || null }
       if (submit) {
-        await supabase
-          .from('report_batches')
-          .update({ 
-            status: 'pending_verifikasi',
-            submitted_at: new Date().toISOString()
-          })
-          .eq('id', id)
+        batchUpdatePayload.status = 'pending_verifikasi'
+        batchUpdatePayload.submitted_at = new Date().toISOString()
+      }
+
+      const { error: errBatch } = await supabase
+        .from('report_batches')
+        .update(batchUpdatePayload)
+        .eq('id', id)
         
+      if (errBatch) throw errBatch
+
+      if (submit) {
         navigate('/staff')
       } else {
         // Just reload to get new IDs
@@ -191,72 +198,88 @@ export default function ChecklistForm() {
         </div>
       )}
 
-      {templates.length === 0 ? (
-        <div className="text-center py-12 bg-white rounded-lg border">
+      {templates.length === 0 && (
+        <div className="text-center py-6 bg-white rounded-lg border mb-6">
           <p className="text-gray-500">Tidak ada rincian tugas untuk bidang Anda pada periode ini.</p>
         </div>
-      ) : (
-        <div className="space-y-6">
-          {Object.entries(groupedTemplates).map(([catName, tpls]) => (
-            <Card key={catName}>
-              <CardHeader className="bg-slate-50 border-b pb-3 pt-4">
-                <CardTitle className="text-lg text-emerald-800">{catName}</CardTitle>
-              </CardHeader>
-              <CardContent className="divide-y p-0">
-                {tpls.map(tpl => (
-                  <div key={tpl.id} className="p-4 space-y-4">
-                    <p className="text-sm font-medium leading-relaxed">{tpl.deskripsi_tugas}</p>
+      )}
+
+      <div className="space-y-6">
+        {Object.entries(groupedTemplates).map(([catName, tpls]) => (
+          <Card key={catName}>
+            <CardHeader className="bg-slate-50 border-b pb-3 pt-4">
+              <CardTitle className="text-lg text-emerald-800">{catName}</CardTitle>
+            </CardHeader>
+            <CardContent className="divide-y p-0">
+              {tpls.map(tpl => (
+                <div key={tpl.id} className="p-4 space-y-4">
+                  <p className="text-sm font-medium leading-relaxed">{tpl.deskripsi_tugas}</p>
+                  
+                  <div className="flex flex-col sm:flex-row sm:items-start gap-4">
+                    <div className="sm:w-1/4 shrink-0">
+                      <Label className="mb-2 block text-xs text-gray-500 uppercase tracking-wider">Status Pelaksanaan</Label>
+                      <RadioGroup 
+                        value={answers[tpl.id]?.status || ''} 
+                        onValueChange={(val) => handleAnswerChange(tpl.id, 'status', val)}
+                        disabled={isReadonly}
+                        className="flex space-x-4"
+                      >
+                        <div className="flex items-center space-x-2">
+                          <RadioGroupItem value="Ya" id={`ya-${tpl.id}`} />
+                          <Label htmlFor={`ya-${tpl.id}`} className="font-normal">Ya</Label>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <RadioGroupItem value="Tdk" id={`tdk-${tpl.id}`} />
+                          <Label htmlFor={`tdk-${tpl.id}`} className="font-normal">Tdk</Label>
+                        </div>
+                      </RadioGroup>
+                    </div>
                     
-                    <div className="flex flex-col sm:flex-row sm:items-start gap-4">
-                      <div className="sm:w-1/4 shrink-0">
-                        <Label className="mb-2 block text-xs text-gray-500 uppercase tracking-wider">Status Pelaksanaan</Label>
-                        <RadioGroup 
-                          value={answers[tpl.id]?.status || ''} 
-                          onValueChange={(val) => handleAnswerChange(tpl.id, 'status', val)}
-                          disabled={isReadonly}
-                          className="flex space-x-4"
-                        >
-                          <div className="flex items-center space-x-2">
-                            <RadioGroupItem value="Ya" id={`ya-${tpl.id}`} />
-                            <Label htmlFor={`ya-${tpl.id}`} className="font-normal">Ya</Label>
-                          </div>
-                          <div className="flex items-center space-x-2">
-                            <RadioGroupItem value="Tdk" id={`tdk-${tpl.id}`} />
-                            <Label htmlFor={`tdk-${tpl.id}`} className="font-normal">Tdk</Label>
-                          </div>
-                        </RadioGroup>
-                      </div>
-                      
-                      <div className="flex-1">
-                        <Label className="mb-2 block text-xs text-gray-500 uppercase tracking-wider">Catatan Tambahan / Bukti</Label>
-                        <Textarea 
-                          value={answers[tpl.id]?.catatan || ''}
-                          onChange={(e) => handleAnswerChange(tpl.id, 'catatan', e.target.value)}
-                          disabled={isReadonly}
-                          placeholder={isReadonly ? '-' : "Opsional: isi link drive foto bukti atau keterangan kendala"}
-                          className="resize-none bg-white"
-                          rows={2}
-                        />
-                      </div>
+                    <div className="flex-1">
+                      <Label className="mb-2 block text-xs text-gray-500 uppercase tracking-wider">Catatan Tambahan / Bukti</Label>
+                      <Textarea 
+                        value={answers[tpl.id]?.catatan || ''}
+                        onChange={(e) => handleAnswerChange(tpl.id, 'catatan', e.target.value)}
+                        disabled={isReadonly}
+                        placeholder={isReadonly ? '-' : "Opsional: isi link drive foto bukti atau keterangan kendala"}
+                        className="resize-none bg-white"
+                        rows={2}
+                      />
                     </div>
                   </div>
-                ))}
-              </CardContent>
-            </Card>
-          ))}
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        ))}
 
-          {!isReadonly && (
-            <div className="flex flex-col sm:flex-row gap-3 pt-4 border-t">
-              <Button type="button" variant="outline" className="flex-1" onClick={() => saveAnswers(false)} disabled={saving}>
-                Simpan Draft
-              </Button>
-              <Button type="button" className="flex-1" onClick={() => saveAnswers(true)} disabled={saving}>
-                Submit untuk Verifikasi
-              </Button>
-            </div>
-          )}
-        </div>
-      )}
+        <Card>
+          <CardHeader className="bg-slate-50 border-b pb-3 pt-4">
+            <CardTitle className="text-lg text-emerald-800">Tugas Lainnya / Tambahan</CardTitle>
+          </CardHeader>
+          <CardContent className="p-4">
+            <Label className="mb-2 block text-sm text-gray-700">Deskripsikan tugas atau pekerjaan lain yang Anda kerjakan pada periode ini:</Label>
+            <Textarea 
+              value={tugasLainnya}
+              onChange={(e) => setTugasLainnya(e.target.value)}
+              disabled={isReadonly}
+              placeholder={isReadonly ? '-' : "Tuliskan tugas tambahan atau pekerjaan lainnya di sini..."}
+              className="resize-y bg-white min-h-[100px]"
+            />
+          </CardContent>
+        </Card>
+
+        {!isReadonly && (
+          <div className="flex flex-col sm:flex-row gap-3 pt-4 border-t">
+            <Button type="button" variant="outline" className="flex-1" onClick={() => saveAnswers(false)} disabled={saving}>
+              Simpan Draft
+            </Button>
+            <Button type="button" className="flex-1" onClick={() => saveAnswers(true)} disabled={saving}>
+              Submit untuk Verifikasi
+            </Button>
+          </div>
+        )}
+      </div>
     </div>
   )
 }

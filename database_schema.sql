@@ -4,7 +4,7 @@ create table profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   nama text not null,
   jabatan text,
-  role text not null check (role in ('admin', 'staff')),
+  role text not null check (role in ('admin', 'staff', 'komite')),
   created_at timestamptz default now()
 );
 
@@ -41,6 +41,7 @@ create table report_batches (
   verified_at timestamptz,
   catatan_verifikasi text,
   submitted_at timestamptz,
+  tugas_lainnya text,
   created_at timestamptz default now(),
   unique(user_id, periode, periode_key)
 );

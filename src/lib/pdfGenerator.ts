@@ -92,7 +92,18 @@ function generateReplika(doc: jsPDF, data: PrintData) {
     }
   })
 
-  const finalY = (doc as any).lastAutoTable.finalY + 20
+  let finalY = (doc as any).lastAutoTable.finalY + 10
+
+  if (data.batch.tugas_lainnya) {
+    doc.setFont("helvetica", "bold")
+    doc.text("Tugas Lainnya / Tambahan:", 14, finalY)
+    doc.setFont("helvetica", "normal")
+    const lines = doc.splitTextToSize(data.batch.tugas_lainnya, 180)
+    doc.text(lines, 14, finalY + 6)
+    finalY += (lines.length * 5) + 10
+  } else {
+    finalY += 10
+  }
 
   // Signatures
   doc.setFontSize(10)
@@ -133,4 +144,13 @@ function generateSimpel(doc: jsPDF, data: PrintData) {
     headStyles: { fillColor: [51, 65, 85] }, // Slate 700
     styles: { fontSize: 9 },
   })
+
+  let finalY = (doc as any).lastAutoTable.finalY + 10
+  if (data.batch.tugas_lainnya) {
+    doc.setFont("helvetica", "bold")
+    doc.text("Tugas Lainnya / Tambahan:", 14, finalY)
+    doc.setFont("helvetica", "normal")
+    const lines = doc.splitTextToSize(data.batch.tugas_lainnya, 180)
+    doc.text(lines, 14, finalY + 6)
+  }
 }

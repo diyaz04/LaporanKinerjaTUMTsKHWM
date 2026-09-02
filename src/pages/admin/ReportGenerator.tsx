@@ -14,9 +14,15 @@ export default function ReportGenerator() {
   
   const [batches, setBatches] = useState<ReportBatch[]>([])
   const [selectedBatch, setSelectedBatch] = useState<string>('')
+  
+  const [reportMode, setReportMode] = useState<'tunggal' | 'gabungan'>('tunggal')
+  const [selectedMonth, setSelectedMonth] = useState<string>('')
 
   const [exportMode, setExportMode] = useState<'replika' | 'simpel'>('replika')
   const [loading, setLoading] = useState(false)
+
+  // Extract unique months from batches
+  const availableMonths = [...new Set(batches.map(b => b.created_at.substring(0, 7)))].sort().reverse()
 
   useEffect(() => {
     fetchStaff()
@@ -27,6 +33,7 @@ export default function ReportGenerator() {
     else {
       setBatches([])
       setSelectedBatch('')
+      setSelectedMonth('')
     }
   }, [selectedStaff])
 
@@ -45,28 +52,82 @@ export default function ReportGenerator() {
     
     if (data) setBatches(data as ReportBatch[])
     setSelectedBatch('')
+    setSelectedMonth('')
   }
 
   const handleDownload = async () => {
-    if (!selectedStaff || !selectedBatch) return
+    if (!selectedStaff) return
+    if (reportMode === 'tunggal' && !selectedBatch) return
+    if (reportMode === 'gabungan' && !selectedMonth) return
+    
     setLoading(true)
     try {
-      // Fetch full data for PDF
-      const { data: batchData } = await supabase.from('report_batches').select('*').eq('id', selectedBatch).single()
       const { data: profileData } = await supabase.from('profiles').select('*').eq('id', selectedStaff).single()
-      const { data: submissionsData } = await supabase
-        .from('task_submissions')
-        .select('*, task_templates(*, task_categories(*))')
-        .eq('report_batch_id', selectedBatch)
-        .order('template_id')
+      if (!profileData) throw new Error("Staff tidak ditemukan")
 
-      if (batchData && profileData && submissionsData) {
-        const printData: PrintData = {
-          batch: batchData as ReportBatch,
-          profile: profileData as Profile,
-          submissions: submissionsData as PrintData['submissions']
+      if (reportMode === 'tunggal') {
+        const { data: batchData } = await supabase.from('report_batches').select('*').eq('id', selectedBatch).single()
+        const { data: submissionsData } = await supabase
+          .from('task_submissions')
+          .select('*, task_templates(*, task_categories(*))')
+          .eq('report_batch_id', selectedBatch)
+          .order('template_id')
+
+        if (batchData && submissionsData) {
+          const printData: PrintData = {
+            batch: batchData as ReportBatch,
+            profile: profileData as Profile,
+            submissions: submissionsData as PrintData['submissions']
+          }
+          generatePDF(printData, exportMode)
         }
-        generatePDF(printData, exportMode)
+      } else {
+        // Gabungan Mode
+        const monthBatches = batches.filter(b => b.created_at.startsWith(selectedMonth))
+        const batchIds = monthBatches.map(b => b.id)
+        
+        const { data: submissionsData } = await supabase
+          .from('task_submissions')
+          .select('*, task_templates(*, task_categories(*))')
+          .in('report_batch_id', batchIds)
+          
+        if (submissionsData) {
+          // Combine submissions and add date context
+          const combinedSubmissions = submissionsData.map(sub => {
+            const parentBatch = monthBatches.find(b => b.id === sub.report_batch_id)
+            return {
+              ...sub,
+              catatan: `[${parentBatch?.periode_key}] ${sub.catatan || ''}`
+            }
+          }) as PrintData['submissions']
+          
+          // Combine tugas_lainnya
+          const allTugasLainnya = monthBatches
+            .filter(b => b.tugas_lainnya)
+            .map(b => `[${b.periode_key}] ${b.tugas_lainnya}`)
+            .join('\n\n')
+
+          const dummyBatch: ReportBatch = {
+            id: 'gabungan',
+            user_id: selectedStaff,
+            periode: 'Gabungan Bulanan',
+            periode_key: selectedMonth,
+            status: 'approved',
+            verified_by: null,
+            verified_at: null,
+            catatan_verifikasi: null,
+            submitted_at: null,
+            created_at: selectedMonth,
+            tugas_lainnya: allTugasLainnya || null
+          }
+
+          const printData: PrintData = {
+            batch: dummyBatch,
+            profile: profileData as Profile,
+            submissions: combinedSubmissions
+          }
+          generatePDF(printData, exportMode)
+        }
       }
     } catch (err) {
       console.error(err)
@@ -106,23 +167,54 @@ export default function ReportGenerator() {
           </div>
 
           <div className="space-y-2">
-            <Label>2. Pilih Periode Laporan (Approved)</Label>
-            <Select value={selectedBatch} onValueChange={setSelectedBatch} disabled={!selectedStaff || batches.length === 0}>
+            <Label>2. Mode Laporan</Label>
+            <Select value={reportMode} onValueChange={(v: 'tunggal'|'gabungan') => setReportMode(v)}>
               <SelectTrigger>
-                <SelectValue placeholder={!selectedStaff ? "Pilih staff dulu" : batches.length === 0 ? "Tidak ada laporan disetujui" : "-- Pilih Laporan --"} />
+                <SelectValue placeholder="Mode Laporan" />
               </SelectTrigger>
               <SelectContent>
-                {batches.map(b => (
-                  <SelectItem key={b.id} value={b.id}>
-                    {b.periode.toUpperCase()} - {b.periode_key}
-                  </SelectItem>
-                ))}
+                <SelectItem value="tunggal">Tunggal (Per Laporan)</SelectItem>
+                <SelectItem value="gabungan">Gabungan Bulanan (Semua dalam 1 bulan)</SelectItem>
               </SelectContent>
             </Select>
           </div>
 
+          {reportMode === 'tunggal' ? (
+            <div className="space-y-2">
+              <Label>3. Pilih Periode Laporan (Approved)</Label>
+              <Select value={selectedBatch} onValueChange={setSelectedBatch} disabled={!selectedStaff || batches.length === 0}>
+                <SelectTrigger>
+                  <SelectValue placeholder={!selectedStaff ? "Pilih staff dulu" : batches.length === 0 ? "Tidak ada laporan disetujui" : "-- Pilih Laporan --"} />
+                </SelectTrigger>
+                <SelectContent>
+                  {batches.map(b => (
+                    <SelectItem key={b.id} value={b.id}>
+                      {b.periode.toUpperCase()} - {b.periode_key}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <Label>3. Pilih Bulan (Approved)</Label>
+              <Select value={selectedMonth} onValueChange={setSelectedMonth} disabled={!selectedStaff || availableMonths.length === 0}>
+                <SelectTrigger>
+                  <SelectValue placeholder={!selectedStaff ? "Pilih staff dulu" : availableMonths.length === 0 ? "Tidak ada laporan disetujui" : "-- Pilih Bulan --"} />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableMonths.map(m => (
+                    <SelectItem key={m} value={m}>
+                      {m}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
           <div className="space-y-2">
-            <Label>3. Mode Export</Label>
+            <Label>4. Mode Export</Label>
             <Select value={exportMode} onValueChange={(v: 'replika'|'simpel') => setExportMode(v)}>
               <SelectTrigger>
                 <SelectValue placeholder="Mode" />
@@ -136,7 +228,7 @@ export default function ReportGenerator() {
 
           <Button 
             className="w-full bg-emerald-600 hover:bg-emerald-700" 
-            disabled={!selectedBatch || loading} 
+            disabled={(reportMode === 'tunggal' && !selectedBatch) || (reportMode === 'gabungan' && !selectedMonth) || loading} 
             onClick={handleDownload}
           >
             <Download className="w-4 h-4 mr-2" />

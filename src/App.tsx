@@ -19,6 +19,8 @@ import VerificationDetail from './pages/admin/VerificationDetail'
 import ReportGenerator from './pages/admin/ReportGenerator'
 import SummaryRekap from './pages/admin/SummaryRekap'
 import RekapPengisian from './pages/admin/RekapPengisian'
+import KomiteLayout from './layouts/KomiteLayout'
+import KomiteDashboard from './pages/komite/KomiteDashboard'
 
 export default function App() {
   return (
@@ -51,6 +53,13 @@ export default function App() {
               <Route path="status" element={<RekapPengisian />} />
             </Route>
           </Route>
+          {/* Komite Routes */}
+          <Route path="/komite" element={<ProtectedRoute allowedRoles={['komite']} />}>
+            <Route element={<KomiteLayout />}>
+              <Route index element={<KomiteDashboard />} />
+            </Route>
+          </Route>
+
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </AuthProvider>

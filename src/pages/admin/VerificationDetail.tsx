@@ -129,6 +129,17 @@ export default function VerificationDetail() {
           </Card>
         ))}
 
+        {batch.tugas_lainnya && (
+          <Card>
+            <CardHeader className="bg-slate-50 border-b pb-3 pt-4">
+              <CardTitle className="text-lg text-emerald-800">Tugas Lainnya / Tambahan</CardTitle>
+            </CardHeader>
+            <CardContent className="p-4">
+              <p className="text-sm text-gray-800 whitespace-pre-wrap">{batch.tugas_lainnya}</p>
+            </CardContent>
+          </Card>
+        )}
+
         {batch.status === 'pending_verifikasi' && (
           <Card className="border-emerald-200">
             <CardHeader className="bg-emerald-50">

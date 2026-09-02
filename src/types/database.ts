@@ -13,7 +13,7 @@ export type Profile = {
   nama: string
   jabatan: string | null
   tipe_karyawan: TipeKaryawan | null
-  role: 'admin' | 'staff'
+  role: 'admin' | 'staff' | 'komite'
   created_at: string
 }
 
@@ -50,6 +50,7 @@ export type ReportBatch = {
   verified_at: string | null
   catatan_verifikasi: string | null
   submitted_at: string | null
+  tugas_lainnya: string | null
   created_at: string
 }
 

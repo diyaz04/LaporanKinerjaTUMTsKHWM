@@ -17,7 +17,9 @@ export default function Login() {
 
   // Redirect if already logged in
   if (session && profile) {
-    return <Navigate to={profile.role === 'admin' ? '/admin' : '/staff'} replace />
+    if (profile.role === 'admin') return <Navigate to="/admin" replace />
+    if (profile.role === 'komite') return <Navigate to="/komite" replace />
+    return <Navigate to="/staff" replace />
   }
 
   const handleLogin = async (e: React.FormEvent) => {
