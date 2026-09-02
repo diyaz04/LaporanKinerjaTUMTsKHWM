@@ -4,9 +4,10 @@ import { Button } from '../../components/ui/button'
 import { Label } from '../../components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select'
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/ui/card'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../components/ui/table'
 import { generatePDF, type PrintData } from '../../lib/pdfGenerator'
 import type { Profile, ReportBatch } from '../../types/database'
-import { FileText, Download, Sparkles } from 'lucide-react'
+import { FileText, Download, Sparkles, Eye } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 
 export default function KomiteDashboard() {
@@ -18,6 +19,7 @@ export default function KomiteDashboard() {
   const [selectedMonth, setSelectedMonth] = useState<string>('')
 
   const [loading, setLoading] = useState(false)
+  const [previewData, setPreviewData] = useState<PrintData | null>(null)
 
   // Extract unique months from batches
   const availableMonths = [...new Set(batches.map(b => b.created_at.substring(0, 7)))].sort().reverse()
@@ -31,6 +33,7 @@ export default function KomiteDashboard() {
     else {
       setBatches([])
       setSelectedMonth('')
+      setPreviewData(null)
     }
   }, [selectedStaff])
 
@@ -49,12 +52,14 @@ export default function KomiteDashboard() {
     
     if (data) setBatches(data as ReportBatch[])
     setSelectedMonth('')
+    setPreviewData(null)
   }
 
-  const handleDownload = async () => {
+  const handleFetchPreview = async () => {
     if (!selectedStaff || !selectedMonth) return
     
     setLoading(true)
+    setPreviewData(null)
     try {
       const { data: profileData } = await supabase.from('profiles').select('*').eq('id', selectedStaff).single()
       if (!profileData) throw new Error("Staff tidak ditemukan")
@@ -76,6 +81,13 @@ export default function KomiteDashboard() {
             catatan: `[${parentBatch?.periode_key}] ${sub.catatan || ''}`
           }
         }) as PrintData['submissions']
+        
+        // Sort grouped by category logic could be done here, but we will rely on UI or just sort by category name
+        combinedSubmissions.sort((a, b) => {
+          const catA = a.task_templates?.task_categories?.nama_bidang || ''
+          const catB = b.task_templates?.task_categories?.nama_bidang || ''
+          return catA.localeCompare(catB)
+        })
         
         // Combine tugas_lainnya
         const allTugasLainnya = monthBatches
@@ -103,19 +115,24 @@ export default function KomiteDashboard() {
           submissions: combinedSubmissions
         }
         
-        // Komite gets Replika mode by default
-        generatePDF(printData, 'replika')
+        setPreviewData(printData)
       }
     } catch (err) {
       console.error(err)
-      alert('Gagal generate PDF')
+      alert('Gagal menampilkan pratinjau data laporan')
     } finally {
       setLoading(false)
     }
   }
 
+  const handleDownloadPDF = () => {
+    if (previewData) {
+      generatePDF(previewData, 'replika')
+    }
+  }
+
   return (
-    <div className="space-y-6 max-w-2xl">
+    <div className="space-y-6 max-w-5xl">
       {/* Greeting Card */}
       <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-amber-700 via-orange-600 to-amber-500 p-8 text-white shadow-lg">
         <div className="absolute -right-10 -top-10 opacity-10">
@@ -137,51 +154,126 @@ export default function KomiteDashboard() {
         <p className="text-gray-500 mt-1">Lihat dan unduh laporan hasil kinerja karyawan per bulan.</p>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Pilih Karyawan & Bulan</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          <div className="space-y-2">
-            <Label>1. Pilih Karyawan</Label>
-            <Select value={selectedStaff} onValueChange={setSelectedStaff}>
-              <SelectTrigger>
-                <SelectValue placeholder="-- Pilih Karyawan --" />
-              </SelectTrigger>
-              <SelectContent>
-                {staffList.map(s => (
-                  <SelectItem key={s.id} value={s.id}>{s.nama}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-start">
+        <Card className="md:col-span-1 sticky top-6">
+          <CardHeader>
+            <CardTitle>Filter Laporan</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div className="space-y-2">
+              <Label>1. Pilih Karyawan</Label>
+              <Select value={selectedStaff} onValueChange={setSelectedStaff}>
+                <SelectTrigger>
+                  <SelectValue placeholder="-- Pilih Karyawan --" />
+                </SelectTrigger>
+                <SelectContent>
+                  {staffList.map(s => (
+                    <SelectItem key={s.id} value={s.id}>{s.nama}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
 
-          <div className="space-y-2">
-            <Label>2. Pilih Bulan (Laporan Disetujui)</Label>
-            <Select value={selectedMonth} onValueChange={setSelectedMonth} disabled={!selectedStaff || availableMonths.length === 0}>
-              <SelectTrigger>
-                <SelectValue placeholder={!selectedStaff ? "Pilih karyawan dulu" : availableMonths.length === 0 ? "Tidak ada laporan disetujui" : "-- Pilih Bulan --"} />
-              </SelectTrigger>
-              <SelectContent>
-                {availableMonths.map(m => (
-                  <SelectItem key={m} value={m}>
-                    {m}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+            <div className="space-y-2">
+              <Label>2. Pilih Bulan</Label>
+              <Select value={selectedMonth} onValueChange={(val) => { setSelectedMonth(val); setPreviewData(null) }} disabled={!selectedStaff || availableMonths.length === 0}>
+                <SelectTrigger>
+                  <SelectValue placeholder={!selectedStaff ? "Pilih karyawan dulu" : availableMonths.length === 0 ? "Tidak ada laporan disetujui" : "-- Pilih Bulan --"} />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableMonths.map(m => (
+                    <SelectItem key={m} value={m}>
+                      {m}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
 
-          <Button 
-            className="w-full bg-emerald-600 hover:bg-emerald-700" 
-            disabled={!selectedMonth || loading} 
-            onClick={handleDownload}
-          >
-            <Download className="w-4 h-4 mr-2" />
-            {loading ? 'Memproses...' : 'Unduh Laporan PDF'}
-          </Button>
-        </CardContent>
-      </Card>
+            <Button 
+              className="w-full" 
+              disabled={!selectedMonth || loading} 
+              onClick={handleFetchPreview}
+            >
+              <Eye className="w-4 h-4 mr-2" />
+              {loading ? 'Memuat Data...' : 'Tampilkan Data'}
+            </Button>
+          </CardContent>
+        </Card>
+
+        <div className="md:col-span-2">
+          {previewData ? (
+            <Card className="shadow-md border-t-4 border-t-emerald-500">
+              <CardHeader className="flex flex-row items-start justify-between bg-emerald-50/50 pb-6 border-b">
+                <div>
+                  <CardTitle className="text-xl">Preview Laporan - {previewData.profile.nama}</CardTitle>
+                  <p className="text-sm text-gray-500 mt-1">
+                    Periode: {previewData.batch.periode_key} | Jabatan: {previewData.profile.jabatan || '-'}
+                  </p>
+                </div>
+                <Button onClick={handleDownloadPDF} className="bg-emerald-600 hover:bg-emerald-700">
+                  <Download className="w-4 h-4 mr-2" />
+                  Cetak PDF
+                </Button>
+              </CardHeader>
+              <CardContent className="p-0">
+                <div className="max-h-[600px] overflow-auto">
+                  <Table>
+                    <TableHeader className="bg-gray-100 sticky top-0 shadow-sm z-10">
+                      <TableRow>
+                        <TableHead className="w-12 text-center">No</TableHead>
+                        <TableHead>Bidang / Urusan</TableHead>
+                        <TableHead>Rincian Tugas</TableHead>
+                        <TableHead className="w-24 text-center">Status</TableHead>
+                        <TableHead>Catatan</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {previewData.submissions.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={5} className="text-center text-gray-500 py-8">
+                            Tidak ada data rincian tugas untuk bulan ini.
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        previewData.submissions.map((sub, idx) => (
+                          <TableRow key={sub.id || idx}>
+                            <TableCell className="text-center">{idx + 1}</TableCell>
+                            <TableCell className="font-medium text-gray-700">
+                              {sub.task_templates?.task_categories?.nama_bidang || 'Lainnya'}
+                            </TableCell>
+                            <TableCell>{sub.task_templates?.deskripsi_tugas}</TableCell>
+                            <TableCell className="text-center">
+                              <span className={`text-xs px-2 py-1 rounded-full border ${sub.status === 'Ya' ? 'bg-green-100 text-green-700 border-green-200' : 'bg-yellow-100 text-yellow-700 border-yellow-200'}`}>
+                                {sub.status || '-'}
+                              </span>
+                            </TableCell>
+                            <TableCell className="text-sm whitespace-pre-wrap">{sub.catatan || '-'}</TableCell>
+                          </TableRow>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
+                
+                {previewData.batch.tugas_lainnya && (
+                  <div className="p-6 bg-slate-50 border-t">
+                    <h3 className="font-semibold text-slate-800 mb-2">Tugas Lainnya / Tambahan:</h3>
+                    <div className="text-sm text-slate-600 whitespace-pre-wrap bg-white p-4 rounded-md border border-slate-200">
+                      {previewData.batch.tugas_lainnya}
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="flex flex-col items-center justify-center h-full min-h-[300px] border-2 border-dashed border-gray-200 rounded-xl bg-gray-50/50 text-gray-400">
+              <FileText className="w-12 h-12 mb-3 text-gray-300" />
+              <p>Pilih Karyawan dan Bulan lalu klik "Tampilkan Data" untuk melihat preview.</p>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   )
 }
