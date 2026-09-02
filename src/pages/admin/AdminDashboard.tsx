@@ -7,9 +7,11 @@ import { Button } from '../../components/ui/button'
 import { Label } from '../../components/ui/label'
 import { Input } from '../../components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select'
-import { CheckCircle, Clock, AlertTriangle } from 'lucide-react'
+import { CheckCircle, Clock, AlertTriangle, Sparkles } from 'lucide-react'
+import { useAuth } from '../../contexts/AuthContext'
 
 export default function AdminDashboard() {
+  const { profile } = useAuth()
   const [stats, setStats] = useState({
     totalStaff: 0,
     harianFilled: 0,
@@ -122,7 +124,18 @@ export default function AdminDashboard() {
 
   return (
     <div className="space-y-6">
-      <h2 className="text-2xl font-bold">Dashboard Admin</h2>
+      {/* Greeting Card */}
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-emerald-900 via-emerald-800 to-green-700 p-8 text-white shadow-lg">
+        <div className="absolute -right-10 -top-10 opacity-10">
+          <Sparkles className="w-64 h-64" />
+        </div>
+        <div className="relative z-10 max-w-2xl">
+          <h2 className="text-3xl font-extrabold mb-2">Selamat datang kembali, {profile?.nama}! 👋</h2>
+          <p className="text-emerald-100 text-lg">
+            Pantau dan kelola kinerja staf tata usaha dengan mudah hari ini. Jangan lupa periksa laporan yang menunggu verifikasi.
+          </p>
+        </div>
+      </div>
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

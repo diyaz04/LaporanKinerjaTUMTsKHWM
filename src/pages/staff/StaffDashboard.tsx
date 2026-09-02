@@ -6,11 +6,11 @@ import { getTodayKey, getWeekKey } from '../../lib/dateUtils'
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '../../components/ui/card'
 import { Badge } from '../../components/ui/badge'
 import { Button } from '../../components/ui/button'
-import { Calendar, Clock, PlusCircle } from 'lucide-react'
+import { Calendar, Clock, PlusCircle, Sparkles } from 'lucide-react'
 import type { ReportBatch } from '../../types/database'
 
 export default function StaffDashboard() {
-  const { session } = useAuth()
+  const { session, profile } = useAuth()
   const navigate = useNavigate()
   const [batches, setBatches] = useState<ReportBatch[]>([])
   const [loading, setLoading] = useState(true)
@@ -122,6 +122,19 @@ export default function StaffDashboard() {
 
   return (
     <div className="space-y-6">
+      {/* Greeting Card */}
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-indigo-900 via-blue-800 to-blue-600 p-8 text-white shadow-lg">
+        <div className="absolute -right-10 -top-10 opacity-10">
+          <Sparkles className="w-64 h-64" />
+        </div>
+        <div className="relative z-10 max-w-2xl">
+          <h2 className="text-3xl font-extrabold mb-2">Halo, {profile?.nama}! 👋</h2>
+          <p className="text-blue-100 text-lg">
+            Semangat bekerja hari ini! Jangan lupa lengkapi tugas harianmu dan catat semua pekerjaan tambahan di dalam laporan.
+          </p>
+        </div>
+      </div>
+
       <div className="flex flex-col space-y-2">
         <h2 className="text-2xl font-bold">Tugas Saya</h2>
         <p className="text-gray-500">Daftar laporan tugas yang perlu Anda isi dan lengkapi.</p>

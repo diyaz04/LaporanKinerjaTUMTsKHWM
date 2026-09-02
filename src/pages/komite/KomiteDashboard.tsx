@@ -6,9 +6,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/ui/card'
 import { generatePDF, type PrintData } from '../../lib/pdfGenerator'
 import type { Profile, ReportBatch } from '../../types/database'
-import { FileText, Download } from 'lucide-react'
+import { FileText, Download, Sparkles } from 'lucide-react'
+import { useAuth } from '../../contexts/AuthContext'
 
 export default function KomiteDashboard() {
+  const { profile } = useAuth()
   const [staffList, setStaffList] = useState<Profile[]>([])
   const [selectedStaff, setSelectedStaff] = useState<string>('')
   
@@ -114,6 +116,19 @@ export default function KomiteDashboard() {
 
   return (
     <div className="space-y-6 max-w-2xl">
+      {/* Greeting Card */}
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-amber-700 via-orange-600 to-amber-500 p-8 text-white shadow-lg">
+        <div className="absolute -right-10 -top-10 opacity-10">
+          <Sparkles className="w-64 h-64" />
+        </div>
+        <div className="relative z-10 max-w-2xl">
+          <h2 className="text-3xl font-extrabold mb-2">Selamat datang, {profile?.nama}! 👋</h2>
+          <p className="text-orange-100 text-lg">
+            Sebagai Ketua Komite, Anda dapat memantau dan mengunduh laporan rekapitulasi kinerja bulanan dari seluruh karyawan.
+          </p>
+        </div>
+      </div>
+
       <div className="border-b pb-4">
         <h2 className="text-2xl font-bold flex items-center gap-2">
           <FileText className="w-6 h-6 text-emerald-600" />
