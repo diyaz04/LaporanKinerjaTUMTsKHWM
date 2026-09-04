@@ -281,18 +281,22 @@ export default function KomiteDashboard() {
                           </TableRow>
                         ))
                       )}
+                      {previewData.batch.tugas_lainnya && (
+                        <TableRow>
+                          <TableCell className="text-center">{previewData.submissions.length + 1}</TableCell>
+                          <TableCell className="font-medium text-gray-700">Tugas Tambahan</TableCell>
+                          <TableCell className="whitespace-pre-wrap">{previewData.batch.tugas_lainnya}</TableCell>
+                          <TableCell className="text-center">
+                            <span className="text-xs px-2 py-1 rounded-full border bg-green-100 text-green-700 border-green-200">
+                              Ya
+                            </span>
+                          </TableCell>
+                          <TableCell className="text-sm">-</TableCell>
+                        </TableRow>
+                      )}
                     </TableBody>
                   </Table>
                 </div>
-                
-                {previewData.batch.tugas_lainnya && (
-                  <div className="p-6 bg-slate-50 border-t">
-                    <h3 className="font-semibold text-slate-800 mb-2">Tugas Lainnya / Tambahan:</h3>
-                    <div className="text-sm text-slate-600 whitespace-pre-wrap bg-white p-4 rounded-md border border-slate-200">
-                      {previewData.batch.tugas_lainnya}
-                    </div>
-                  </div>
-                )}
               </CardContent>
             </Card>
           ) : (

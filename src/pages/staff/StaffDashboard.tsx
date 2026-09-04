@@ -45,8 +45,8 @@ export default function StaffDashboard() {
     let needsRefresh = false
 
     for (const ap of autoPeriods) {
-      const exists = currentBatches.find(b => b.periode === ap.periode && b.periode_key === ap.key)
-      if (!exists) {
+      const existsActive = currentBatches.find(b => b.periode === ap.periode && b.periode_key === ap.key && (b.status === 'draft' || b.status === 'revisi'))
+      if (!existsActive) {
         const { error } = await supabase
           .from('report_batches')
           .insert({

@@ -7,6 +7,7 @@ import { Label } from '../../components/ui/label'
 import { Textarea } from '../../components/ui/textarea'
 import { RadioGroup, RadioGroupItem } from '../../components/ui/radio-group'
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/ui/card'
+import { Checkbox } from '../../components/ui/checkbox'
 import { AlertCircle, ArrowLeft } from 'lucide-react'
 import type { ReportBatch, TaskTemplate, TaskCategory } from '../../types/database'
 
@@ -24,6 +25,8 @@ export default function ChecklistForm() {
   
   // Local state for answers: { template_id: { status: 'Ya'|'Tdk', catatan: '' } }
   const [answers, setAnswers] = useState<Record<string, { status: string; catatan: string; id?: string }>>({})
+  const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>([])
+  const [submittedTemplateIds, setSubmittedTemplateIds] = useState<string[]>([])
   const [tugasLainnya, setTugasLainnya] = useState('')
   
   const [loading, setLoading] = useState(true)
@@ -72,15 +75,40 @@ export default function ChecklistForm() {
       
       if (tpls) setTemplates(tpls as TemplateWithCategory[])
 
-      // 4. Fetch existing submissions for this batch
+      // 4. Fetch sibling batches to find already submitted tasks
+      const { data: siblingBatches } = await supabase
+        .from('report_batches')
+        .select('id, status')
+        .eq('user_id', session.user.id)
+        .eq('periode', batchData.periode)
+        .eq('periode_key', batchData.periode_key)
+
+      const submittedBatchIds = siblingBatches
+        ?.filter(b => b.id !== id && (b.status === 'pending_verifikasi' || b.status === 'approved'))
+        .map(b => b.id) || []
+
+      let alreadySubmittedIds: string[] = []
+      if (submittedBatchIds.length > 0) {
+        const { data: siblingSubs } = await supabase
+          .from('task_submissions')
+          .select('template_id')
+          .in('report_batch_id', submittedBatchIds)
+        
+        alreadySubmittedIds = siblingSubs?.map(s => s.template_id).filter(Boolean) as string[] || []
+        setSubmittedTemplateIds(alreadySubmittedIds)
+      }
+
+      // 5. Fetch existing submissions for this batch
       const { data: subs } = await supabase
         .from('task_submissions')
         .select('*')
         .eq('report_batch_id', id)
 
       const initialAnswers: typeof answers = {}
+      const initialSelected: string[] = []
       subs?.forEach(sub => {
         if (sub.template_id) {
+          initialSelected.push(sub.template_id)
           initialAnswers[sub.template_id] = {
             id: sub.id,
             status: sub.status || '',
@@ -88,7 +116,18 @@ export default function ChecklistForm() {
           }
         }
       })
+      
+      // Select all unsubmitted templates by default if creating a new draft
+      if (subs?.length === 0) {
+         tpls?.forEach(t => {
+           if (!alreadySubmittedIds.includes(t.id)) {
+             initialSelected.push(t.id)
+           }
+         })
+      }
+      
       setAnswers(initialAnswers)
+      setSelectedTaskIds(initialSelected)
     }
 
     setLoading(false)
@@ -106,24 +145,37 @@ export default function ChecklistForm() {
 
   const saveAnswers = async (submit: boolean) => {
     if (!id || !batch) return
+    
+    if (submit && selectedTaskIds.length === 0 && !tugasLainnya.trim()) {
+      alert('Pilih minimal 1 tugas atau isi Tugas Lainnya sebelum mensubmit laporan.')
+      return
+    }
+
     setSaving(true)
 
     try {
       const inserts: any[] = []
       const updates: any[] = []
+      const idsToDelete: string[] = []
 
       templates.forEach(tpl => {
+        const isSelected = selectedTaskIds.includes(tpl.id)
         const ans = answers[tpl.id]
-        const payload = {
-          report_batch_id: id,
-          template_id: tpl.id,
-          status: ans?.status || null,
-          catatan: ans?.catatan || null
-        }
-        if (ans?.id) {
-          updates.push({ ...payload, id: ans.id })
-        } else {
-          inserts.push(payload)
+        
+        if (isSelected) {
+          const payload = {
+            report_batch_id: id,
+            template_id: tpl.id,
+            status: ans?.status || null,
+            catatan: ans?.catatan || null
+          }
+          if (ans?.id) {
+            updates.push({ ...payload, id: ans.id })
+          } else {
+            inserts.push(payload)
+          }
+        } else if (ans?.id) {
+          idsToDelete.push(ans.id)
         }
       })
       
@@ -135,6 +187,11 @@ export default function ChecklistForm() {
       if (updates.length > 0) {
         const { error: err2 } = await supabase.from('task_submissions').upsert(updates)
         if (err2) throw err2
+      }
+
+      if (idsToDelete.length > 0) {
+        const { error: err3 } = await supabase.from('task_submissions').delete().in('id', idsToDelete)
+        if (err3) throw err3
       }
 
       const batchUpdatePayload: any = { tugas_lainnya: tugasLainnya || null }
@@ -211,11 +268,34 @@ export default function ChecklistForm() {
               <CardTitle className="text-lg text-emerald-800">{catName}</CardTitle>
             </CardHeader>
             <CardContent className="divide-y p-0">
-              {tpls.map(tpl => (
-                <div key={tpl.id} className="p-4 space-y-4">
-                  <p className="text-sm font-medium leading-relaxed">{tpl.deskripsi_tugas}</p>
+              {tpls.map(tpl => {
+                const isAlreadySubmitted = submittedTemplateIds.includes(tpl.id)
+                const isSelected = selectedTaskIds.includes(tpl.id)
+                
+                const handleToggleSelect = (checked: boolean) => {
+                  if (checked) setSelectedTaskIds(prev => [...prev, tpl.id])
+                  else setSelectedTaskIds(prev => prev.filter(id => id !== tpl.id))
+                }
+
+                return (
+                  <div key={tpl.id} className={`p-4 space-y-4 ${isAlreadySubmitted ? 'opacity-50 grayscale bg-gray-50' : isSelected ? 'bg-emerald-50/20' : ''}`}>
+                    <div className="flex items-start gap-3">
+                      <Checkbox 
+                        checked={isAlreadySubmitted ? true : isSelected}
+                        disabled={isAlreadySubmitted || isReadonly}
+                        onCheckedChange={handleToggleSelect}
+                        className="mt-1"
+                        id={`check-${tpl.id}`}
+                      />
+                      <div className="flex-1">
+                        <Label htmlFor={`check-${tpl.id}`} className={`text-sm font-medium leading-relaxed cursor-pointer ${isAlreadySubmitted ? 'text-gray-500' : 'text-gray-900'}`}>
+                          {tpl.deskripsi_tugas}
+                        </Label>
+                        {isAlreadySubmitted && <p className="text-xs text-blue-600 mt-1 font-semibold">Tugas ini sudah dilaporkan pada draf/batch lain.</p>}
+                      </div>
+                    </div>
                   
-                  <div className="flex flex-col sm:flex-row sm:items-start gap-4">
+                  <div className={`flex flex-col sm:flex-row sm:items-start gap-4 pl-7 ${(!isSelected && !isAlreadySubmitted) ? 'opacity-40 pointer-events-none' : ''}`}>
                     <div className="sm:w-1/4 shrink-0">
                       <Label className="mb-2 block text-xs text-gray-500 uppercase tracking-wider">Status Pelaksanaan</Label>
                       <RadioGroup 
@@ -247,8 +327,9 @@ export default function ChecklistForm() {
                       />
                     </div>
                   </div>
-                </div>
-              ))}
+                  </div>
+                )
+              })}
             </CardContent>
           </Card>
         ))}

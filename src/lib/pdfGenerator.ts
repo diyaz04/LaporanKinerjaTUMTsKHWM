@@ -87,6 +87,20 @@ function generateReplika(doc: jsPDF, data: PrintData) {
     })
   })
 
+  if (data.batch.tugas_lainnya) {
+    tableData.push([
+      { content: '', styles: { fillColor: [240, 240, 240] } },
+      { content: 'Tugas Tambahan / Lainnya', colSpan: 4, styles: { fontStyle: 'bold', fillColor: [240, 240, 240] } }
+    ])
+    tableData.push([
+      counter++,
+      'Tugas Tambahan',
+      data.batch.tugas_lainnya,
+      'Ya',
+      '-'
+    ])
+  }
+
   autoTable(doc, {
     startY: startY,
     head: [['No', 'Bidang/Urusan', 'Rincian Tugas & Item Output', 'Status', 'Keterangan']],
@@ -110,17 +124,6 @@ function generateReplika(doc: jsPDF, data: PrintData) {
   })
 
   let finalY = (doc as any).lastAutoTable.finalY + 10
-
-  if (data.batch.tugas_lainnya) {
-    doc.setFont("helvetica", "bold")
-    doc.text("Tugas Lainnya / Tambahan:", 14, finalY)
-    doc.setFont("helvetica", "normal")
-    const lines = doc.splitTextToSize(data.batch.tugas_lainnya, 180)
-    doc.text(lines, 14, finalY + 6)
-    finalY += (lines.length * 5) + 10
-  } else {
-    finalY += 10
-  }
 
   // Signatures
   doc.setFontSize(10)
@@ -167,6 +170,16 @@ function generateSimpel(doc: jsPDF, data: PrintData) {
     ]
   })
 
+  if (data.batch.tugas_lainnya) {
+    tableData.push([
+      tableData.length + 1,
+      'Tugas Tambahan / Lainnya',
+      data.batch.tugas_lainnya,
+      'Ya',
+      '-'
+    ])
+  }
+
   autoTable(doc, {
     startY: startY,
     head: [['No', 'Bidang', 'Tugas', 'Status', 'Catatan']],
@@ -175,13 +188,4 @@ function generateSimpel(doc: jsPDF, data: PrintData) {
     headStyles: { fillColor: [51, 65, 85] }, // Slate 700
     styles: { fontSize: 9 },
   })
-
-  let finalY = (doc as any).lastAutoTable.finalY + 10
-  if (data.batch.tugas_lainnya) {
-    doc.setFont("helvetica", "bold")
-    doc.text("Tugas Lainnya / Tambahan:", 14, finalY)
-    doc.setFont("helvetica", "normal")
-    const lines = doc.splitTextToSize(data.batch.tugas_lainnya, 180)
-    doc.text(lines, 14, finalY + 6)
-  }
 }
